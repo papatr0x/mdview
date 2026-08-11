@@ -6,8 +6,17 @@ import SwiftUI
 struct FontPickerView: View {
     @Bindable var preferences = Preferences.shared
 
+    /// Only fixed-width (monospaced) families are offered — mdview is meant
+    /// to read like colorized source text, which relies on consistent
+    /// character width (list/quote indentation, alignment of `#`/`>`
+    /// markers, etc.).
     private var families: [String] {
-        NSFontManager.shared.availableFontFamilies.sorted()
+        NSFontManager.shared.availableFontFamilies.filter { family in
+            guard let members = NSFontManager.shared.availableMembers(ofFontFamily: family),
+                  let fontName = members.first?[0] as? String,
+                  let font = NSFont(name: fontName, size: 12) else { return false }
+            return font.isFixedPitch
+        }.sorted()
     }
 
     var body: some View {
