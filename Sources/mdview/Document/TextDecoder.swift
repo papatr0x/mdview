@@ -6,9 +6,16 @@ import Foundation
 /// `FileDocument`, and byte-order marks are handled explicitly rather than
 /// left to Foundation, whose behaviour differs between OS releases.
 enum TextDecoder {
-    /// Parsing and highlighting run synchronously on the main thread, which is
-    /// imperceptible for ordinary documents but would stall the UI on a
-    /// pathologically large one, so refuse those outright with a clear reason.
+    /// An upper bound on garbage input — not a promise about responsiveness.
+    ///
+    /// Parsing and highlighting run synchronously on the main thread at
+    /// roughly half a second per megabyte (measured), so a file anywhere near
+    /// this ceiling *does* stall the UI for seconds. That is accepted rather
+    /// than papered over with a smaller number: real markdown is orders of
+    /// magnitude smaller, and the point of the limit is to reject something
+    /// that is not a document at all, with a clear reason instead of a hang.
+    /// Making large files genuinely comfortable is a rendering change — cache
+    /// the parsed tree and re-apply only attributes — not a lower ceiling.
     static let maximumFileSize = 32 * 1024 * 1024
 
     static func decode(_ data: Data) throws -> String {

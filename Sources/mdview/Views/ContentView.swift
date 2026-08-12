@@ -21,10 +21,26 @@ struct ContentView: View {
                 if isDarkAppearance != isDark { isDarkAppearance = isDark }
             }
         )
+        .background(fontSizeShortcutAlias)
         .onDrop(of: [.fileURL], isTargeted: nil, perform: handleDrop)
         .onAppear { render() }
         .onChange(of: document.text) { render() }
         .onChange(of: renderInputs) { render() }
+    }
+
+    /// Cmd+= as an alias for the menu's Cmd++.
+    ///
+    /// On US/UK layouts "+" is a shifted key, so the menu shortcut alone
+    /// makes zooming in a three-finger chord; every macOS app accepts "="
+    /// as the unshifted equivalent. SwiftUI allows one shortcut per menu
+    /// command, so the alias lives here as a zero-sized button rather than
+    /// as a duplicate menu entry.
+    private var fontSizeShortcutAlias: some View {
+        Button("") { preferences.increaseFontSize() }
+            .keyboardShortcut("=", modifiers: .command)
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
     }
 
     /// Everything the rendered text actually depends on, gathered into one

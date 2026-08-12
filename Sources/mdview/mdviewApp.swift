@@ -11,10 +11,16 @@ struct MdviewApp: App {
             ContentView(document: file.document)
         }
         .commands {
-            CommandGroup(after: .textEditing) {
+            // In the View menu, where macOS puts zoom — not Edit, which is
+            // for changing the document (and this app never does).
+            CommandGroup(after: .toolbar) {
                 Button("Increase Font Size") {
                     Preferences.shared.increaseFontSize()
                 }
+                // "+" is what the menu should read, and it is an unshifted
+                // key on ISO layouts. Where it is *not* — US/UK, where it
+                // costs a Shift — the conventional "=" alias is bound in
+                // `ContentView`, since SwiftUI allows only one shortcut here.
                 .keyboardShortcut("+", modifiers: .command)
 
                 Button("Decrease Font Size") {
