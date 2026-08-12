@@ -142,6 +142,28 @@ final class OrderedListNumberingTests: XCTestCase {
         }
     }
 
+    /// The longest marker CommonMark allows must be colored end to end. It
+    /// used to lose its tail, and renumbering turned that into a difference
+    /// *between items of the same list*: a rewritten numeral inherits the
+    /// marker attributes wholesale, an untouched one kept the truncation.
+    func testLongestAllowedMarkerIsColoredEndToEnd() {
+        let currentStyle = style()
+        let attributed = MarkdownRenderer.render(
+            markdown: "123456789. one\n123456789. two\n",
+            style: currentStyle
+        )
+        XCTAssertTrue(attributed.string.contains("123456790. two"), "second item should be renumbered")
+
+        var colored = 0
+        for index in 0..<attributed.length
+        where (attributed.attribute(.foregroundColor, at: index, effectiveRange: nil) as? NSColor)
+            == currentStyle.color(for: .listMarker) {
+            colored += 1
+        }
+        // Two markers of "123456789." / "123456790." — ten characters each.
+        XCTAssertEqual(colored, 20)
+    }
+
     // MARK: - Opting out
 
     func testRenumberingCanBeDisabledForAVerbatimView() {

@@ -206,9 +206,9 @@ private struct SourceHighlighter: MarkupVisitor {
     private func digitsRange(atStartOf itemRange: NSRange) -> NSRange? {
         let nsText = attributed.string as NSString
         guard itemRange.location != NSNotFound, itemRange.length > 0 else { return nil }
-        // CommonMark caps ordered markers at nine digits; one past that is
-        // enough to see that a longer run is not a marker at all.
-        let limit = min(itemRange.length, 10)
+        // One past the nine digits CommonMark allows is enough to see that a
+        // longer run is not a marker at all.
+        let limit = min(itemRange.length, Self.longestOrderedMarkerLength)
         var length = 0
         while length < limit, isASCIIDigit(nsText.character(at: itemRange.location + length)) {
             length += 1
@@ -218,6 +218,10 @@ private struct SourceHighlighter: MarkupVisitor {
         guard delimiter == Self.utf16(".") || delimiter == Self.utf16(")") else { return nil }
         return NSRange(location: itemRange.location, length: length)
     }
+
+    /// Nine digits — CommonMark's limit for an ordered-list marker — plus the
+    /// `.` or `)` that closes it.
+    private static let longestOrderedMarkerLength = 10
 
     private func isASCIIDigit(_ character: unichar) -> Bool {
         character >= Self.utf16("0") && character <= Self.utf16("9")
@@ -262,10 +266,16 @@ private struct SourceHighlighter: MarkupVisitor {
     /// only the marker itself: stop at the first whitespace character of any
     /// kind (a tab is as valid a separator as a space) and leave that
     /// separator out of the returned range.
+    ///
+    /// The scan window is the longest marker CommonMark allows: nine digits
+    /// plus a delimiter. A shorter window left the tail of a long marker
+    /// uncolored — and renumbering made that visible *within one document*,
+    /// since a rewritten numeral inherits the marker attributes wholesale
+    /// while an untouched one kept the truncation.
     private func markerRange(within itemRange: NSRange) -> NSRange? {
         let nsText = attributed.string as NSString
         guard itemRange.location != NSNotFound, itemRange.length > 0 else { return nil }
-        let searchLength = min(itemRange.length, 8)
+        let searchLength = min(itemRange.length, Self.longestOrderedMarkerLength)
         let prefix = nsText.substring(with: NSRange(location: itemRange.location, length: searchLength))
         var markerLength = 0
         for character in prefix {
