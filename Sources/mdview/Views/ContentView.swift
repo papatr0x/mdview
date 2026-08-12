@@ -82,10 +82,9 @@ struct ContentView: View {
     /// colors it should have had — which on a large file shows up as a white
     /// window for as long as the first, wasted, render takes.
     private static func appearanceIsDark() -> Bool {
-        // Reading the shared settings first applies any Light/Dark override,
-        // so this reflects that override and not only the OS setting.
-        _ = Preferences.shared
-        return NSApp?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        // `MdviewApp.init` has already pushed any Light/Dark override onto the
+        // app, so this reflects that override and not only the OS setting.
+        NSApp?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
     /// A dropped file opens in its own window, the same as a double-click,

@@ -64,11 +64,11 @@ final class Preferences {
     var appearanceMode: AppearanceMode {
         didSet {
             defaults.set(appearanceMode.rawValue, forKey: Keys.appearanceMode)
-            NSApp.appearance = appearanceMode.nsAppearance
+            applyAppearance()
         }
     }
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
     static let fontSizeRange: ClosedRange<CGFloat> = 9...36
     private static let fontSizeStep: CGFloat = 1
@@ -82,7 +82,12 @@ final class Preferences {
         static let appearanceMode = "mdview.appearanceMode"
     }
 
-    private init() {
+    /// - Parameter defaults: the store to read and persist through. Injectable
+    ///   so tests can run against a scratch suite: the alternative is writing
+    ///   into `UserDefaults.standard`, which is the app's real domain — a test
+    ///   would silently overwrite the settings of whoever ran it.
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         fontFamily = defaults.string(forKey: Keys.fontFamily) ?? "Courier New"
         let storedSize = defaults.double(forKey: Keys.fontSize)
         fontSize = storedSize > 0 ? CGFloat(storedSize) : 13
@@ -97,8 +102,17 @@ final class Preferences {
         } else {
             colorTheme = .default
         }
+    }
 
-        NSApp.appearance = appearanceMode.nsAppearance
+    /// Pushes the stored Light/Dark override onto the running app.
+    ///
+    /// Deliberately not done from `init`: an initializer that reconfigures
+    /// global UI state is hard to reason about wherever it runs, and it made
+    /// the type impossible to construct at all outside a running app — `NSApp`
+    /// is nil in a test bundle, so the assignment trapped. The app calls this
+    /// once at launch; changing `appearanceMode` calls it again.
+    func applyAppearance() {
+        NSApp?.appearance = appearanceMode.nsAppearance
     }
 
     /// Cmd+ and Cmd-.

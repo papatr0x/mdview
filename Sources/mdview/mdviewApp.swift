@@ -2,6 +2,13 @@ import SwiftUI
 
 @main
 struct MdviewApp: App {
+    init() {
+        // The one place the stored Light/Dark override reaches the app, and
+        // it runs before any scene is built — `ContentView` reads back the
+        // resulting appearance to pick its palette.
+        Preferences.shared.applyAppearance()
+    }
+
     var body: some Scene {
         // A viewing-only `DocumentGroup`: macOS opens each file in its own
         // window, and routes double-click, "Open With", `open`, and the Open
