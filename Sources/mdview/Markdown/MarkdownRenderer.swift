@@ -1,6 +1,19 @@
 import AppKit
 import Markdown
 
+/// What the source says, independent of how it should look: the ranges to
+/// style, what each one is, and any ordered-list numerals to rewrite.
+///
+/// This is the expensive half of rendering and it depends only on the text —
+/// parsing, walking the tree, and mapping every node's line/column range to an
+/// `NSRange`. Changing a color or the font size does not change any of it, so
+/// a plan is built once per document and replayed against whatever
+/// `MarkdownStyle` is current (see `StylePlanCache`).
+struct StylePlan {
+    fileprivate let operations: [StyleOperation]
+    fileprivate let renumberings: [Renumbering]
+}
+
 /// Renders markdown as **syntax-highlighted source**, not a WYSIWYG preview:
 /// the original text (including `#`, `>`, `**`, backticks, etc.) is preserved
 /// verbatim, and colors/traits are layered on top of it per node type. This
@@ -10,6 +23,21 @@ import Markdown
 /// Ordered-list numerals are the one deliberate exception — see
 /// `renumberOrderedLists`.
 enum MarkdownRenderer {
+    /// Parses `text` and works out what to style, without deciding any colors.
+    static func plan(for text: String) -> StylePlan {
+        guard !text.isEmpty else { return StylePlan(operations: [], renumberings: []) }
+
+        var planner = SourcePlanner(
+            text: text,
+            lineStartUTF8Offsets: Self.lineStartUTF8Offsets(in: text)
+        )
+        planner.visit(Document(parsing: text))
+        return StylePlan(operations: planner.operations, renumberings: planner.renumberings)
+    }
+
+    /// Paints a plan with a concrete style. Cheap enough to redo on every
+    /// preference change, which is the point of separating it from `plan(for:)`.
+    ///
     /// - Parameter renumberOrderedLists: Displays each ordered-list item with
     ///   its actual position instead of the numeral written in the file.
     ///   CommonMark only reads the *first* item's number (it sets where the
@@ -17,7 +45,10 @@ enum MarkdownRenderer {
     ///   entirely as `1.` is both perfectly valid and unreadable as a list.
     ///   This is the only place mdview alters the source text; the "Renumber
     ///   ordered lists" setting turns it off for a strictly verbatim view.
+    ///   The rewrites are part of every plan — they depend on the text, not on
+    ///   the style — so toggling the setting does not invalidate a cached plan.
     static func render(
+        plan: StylePlan,
         markdown text: String,
         style: MarkdownStyle,
         renumberOrderedLists: Bool = true
@@ -29,26 +60,91 @@ enum MarkdownRenderer {
                 .foregroundColor: style.color(for: .body)
             ]
         )
-        guard !text.isEmpty else { return attributed }
+        for operation in plan.operations {
+            Self.apply(operation, to: attributed, style: style)
+        }
+        if renumberOrderedLists {
+            Self.apply(plan.renumberings, to: attributed)
+        }
+        return attributed
+    }
 
-        let document = Document(parsing: text)
-        var highlighter = SourceHighlighter(
-            text: text,
-            lineStartUTF8Offsets: Self.lineStartUTF8Offsets(in: text),
+    /// Plan and paint in one go, for callers with nothing to cache.
+    static func render(
+        markdown text: String,
+        style: MarkdownStyle,
+        renumberOrderedLists: Bool = true
+    ) -> NSAttributedString {
+        render(
+            plan: plan(for: text),
+            markdown: text,
             style: style,
-            attributed: attributed,
             renumberOrderedLists: renumberOrderedLists
         )
-        highlighter.visit(document)
-        Self.apply(highlighter.renumberings, to: highlighter.attributed)
-        return highlighter.attributed
+    }
+
+    // MARK: - Painting
+
+    /// The operations are replayed in the order the walk produced them, which
+    /// several of them depend on: `.monospacedPreservingTraits` and `.trait`
+    /// read the font already sitting on the range and build on it, so an
+    /// enclosing bold must have been applied before the inline code inside it.
+    private static func apply(
+        _ operation: StyleOperation,
+        to attributed: NSMutableAttributedString,
+        style: MarkdownStyle
+    ) {
+        switch operation {
+        case let .style(kind, range, changeFont):
+            attributed.addAttribute(.foregroundColor, value: style.color(for: kind), range: range)
+            if changeFont {
+                attributed.addAttribute(.font, value: style.font(for: kind), range: range)
+            }
+
+        case let .codeBlockBackground(range):
+            // Coloring through each line's trailing newline is what makes
+            // NSTextView stretch the background to the full line width,
+            // giving the fenced block its solid "block" look.
+            attributed.addAttribute(.backgroundColor, value: style.codeBlockBackgroundColor, range: range)
+
+        case let .underline(range):
+            attributed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+
+        case let .trait(bold, italic, range):
+            attributed.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
+                let currentFont = (value as? NSFont) ?? style.baseFont
+                attributed.addAttribute(
+                    .font,
+                    value: style.withTraits(currentFont, bold: bold, italic: italic),
+                    range: subRange
+                )
+            }
+
+        case let .monospacedPreservingTraits(kind, range):
+            // Enclosing strong/emphasis nodes are painted first, so the range
+            // may already carry bold/italic; switch to monospaced without
+            // discarding those traits.
+            let monoFont = style.font(for: kind)
+            attributed.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
+                let existingTraits = (value as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
+                attributed.addAttribute(
+                    .font,
+                    value: style.withTraits(
+                        monoFont,
+                        bold: existingTraits.contains(.boldFontMask),
+                        italic: existingTraits.contains(.italicFontMask)
+                    ),
+                    range: subRange
+                )
+            }
+        }
     }
 
     /// Rewriting a numeral changes the string's length, which would invalidate
-    /// every range the visitor recorded against the *original* text. Applying
-    /// the edits back to front — after the walk, never during it — means each
-    /// range is still accurate at the moment it is used, since an edit only
-    /// shifts the text that follows it.
+    /// every range the plan recorded against the *original* text. Applying the
+    /// edits back to front — after everything else, never during it — means
+    /// each range is still accurate at the moment it is used, since an edit
+    /// only shifts the text that follows it.
     private static func apply(_ renumberings: [Renumbering], to attributed: NSMutableAttributedString) {
         for renumbering in renumberings.sorted(by: { $0.range.location > $1.range.location }) {
             guard NSMaxRange(renumbering.range) <= attributed.length else { continue }
@@ -75,6 +171,16 @@ enum MarkdownRenderer {
     }
 }
 
+/// One styling decision, recorded without resolving it: which range, and what
+/// to do to it. Colors and fonts come later, from whatever style is current.
+private enum StyleOperation {
+    case style(kind: MarkdownNodeKind, range: NSRange, changeFont: Bool)
+    case codeBlockBackground(NSRange)
+    case underline(NSRange)
+    case trait(bold: Bool, italic: Bool, range: NSRange)
+    case monospacedPreservingTraits(kind: MarkdownNodeKind, range: NSRange)
+}
+
 /// A pending rewrite of one ordered-list numeral: the range of the digits as
 /// they appear in the source, and the number to show in their place.
 private struct Renumbering {
@@ -82,17 +188,17 @@ private struct Renumbering {
     let replacement: String
 }
 
-private struct SourceHighlighter: MarkupVisitor {
+/// Walks the parsed document and records what should be styled, never how.
+private struct SourcePlanner: MarkupVisitor {
     typealias Result = Void
 
     let text: String
     let lineStartUTF8Offsets: [Int]
-    let style: MarkdownStyle
-    var attributed: NSMutableAttributedString
-    let renumberOrderedLists: Bool
 
-    /// Collected during the walk, applied by the caller once it finishes.
+    var operations: [StyleOperation] = []
     var renumberings: [Renumbering] = []
+
+    private var nsText: NSString { text as NSString }
 
     // MARK: - Leaf / whole-range coloring
 
@@ -104,71 +210,65 @@ private struct SourceHighlighter: MarkupVisitor {
 
     mutating func visitHeading(_ heading: Heading) {
         if let range = nsRange(for: heading) {
-            apply(kind: headingKind(for: heading.level), range: range)
+            operations.append(.style(kind: headingKind(for: heading.level), range: range, changeFont: true))
         }
         for child in heading.children { visit(child) }
     }
 
     mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
         if let range = nsRange(for: blockQuote) {
-            apply(kind: .blockquote, range: range, changeFont: false)
+            operations.append(.style(kind: .blockquote, range: range, changeFont: false))
         }
         for child in blockQuote.children { visit(child) }
     }
 
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
         if let range = nsRange(for: codeBlock) {
-            apply(kind: .codeBlock, range: range)
-            // Coloring through each line's trailing newline is what makes
-            // NSTextView stretch the background to the full line width,
-            // giving the fenced block its solid "block" look.
-            attributed.addAttribute(.backgroundColor, value: style.codeBlockBackgroundColor, range: range)
+            operations.append(.style(kind: .codeBlock, range: range, changeFont: true))
+            operations.append(.codeBlockBackground(range))
         }
     }
 
     mutating func visitThematicBreak(_ thematicBreak: ThematicBreak) {
         if let range = nsRange(for: thematicBreak) {
-            apply(kind: .thematicBreak, range: range, changeFont: false)
+            operations.append(.style(kind: .thematicBreak, range: range, changeFont: false))
         }
     }
 
     mutating func visitInlineCode(_ inlineCode: InlineCode) {
         if let range = nsRange(for: inlineCode) {
-            apply(kind: .inlineCode, range: range, changeFont: false)
-            // Enclosing strong/emphasis nodes are visited first, so the range
-            // may already carry bold/italic; switch to monospaced without
-            // discarding those traits.
-            applyMonospacedPreservingTraits(kind: .inlineCode, range: range)
+            operations.append(.style(kind: .inlineCode, range: range, changeFont: false))
+            operations.append(.monospacedPreservingTraits(kind: .inlineCode, range: range))
         }
     }
 
     mutating func visitStrong(_ strong: Strong) {
         if let range = nsRange(for: strong) {
-            apply(kind: .strong, range: range, changeFont: false)
-            addTrait(bold: true, italic: false, range: range)
+            operations.append(.style(kind: .strong, range: range, changeFont: false))
+            operations.append(.trait(bold: true, italic: false, range: range))
         }
         for child in strong.children { visit(child) }
     }
 
     mutating func visitEmphasis(_ emphasis: Emphasis) {
         if let range = nsRange(for: emphasis) {
-            apply(kind: .emphasis, range: range, changeFont: false)
-            addTrait(bold: false, italic: true, range: range)
+            operations.append(.style(kind: .emphasis, range: range, changeFont: false))
+            operations.append(.trait(bold: false, italic: true, range: range))
         }
         for child in emphasis.children { visit(child) }
     }
 
     mutating func visitLink(_ link: Link) {
         if let range = nsRange(for: link) {
-            apply(kind: .link, range: range, changeFont: false)
-            attributed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: range)
+            operations.append(.style(kind: .link, range: range, changeFont: false))
+            operations.append(.underline(range))
         }
         for child in link.children { visit(child) }
     }
 
     mutating func visitListItem(_ listItem: ListItem) {
         if let full = nsRange(for: listItem), let markerRange = markerRange(within: full) {
-            apply(kind: .listMarker, range: markerRange, changeFont: false)
+            operations.append(.style(kind: .listMarker, range: markerRange, changeFont: false))
         }
         for child in listItem.children { visit(child) }
     }
@@ -180,19 +280,19 @@ private struct SourceHighlighter: MarkupVisitor {
         // the rest, which is exactly the rule being made visible here.
         var number = orderedList.startIndex
         for item in orderedList.listItems {
-            if renumberOrderedLists {
-                recordRenumbering(of: item, to: number)
-            }
+            recordRenumbering(of: item, to: number)
             number += 1
             visit(item)
         }
     }
 
+    // MARK: - Ordered-list numerals
+
     private mutating func recordRenumbering(of listItem: ListItem, to number: UInt) {
         guard let itemRange = nsRange(for: listItem),
               let digits = digitsRange(atStartOf: itemRange) else { return }
         let replacement = String(number)
-        guard (attributed.string as NSString).substring(with: digits) != replacement else { return }
+        guard nsText.substring(with: digits) != replacement else { return }
         renumberings.append(Renumbering(range: digits, replacement: replacement))
     }
 
@@ -204,7 +304,6 @@ private struct SourceHighlighter: MarkupVisitor {
     /// delimiter: text this function does not positively recognize is never
     /// rewritten.
     private func digitsRange(atStartOf itemRange: NSRange) -> NSRange? {
-        let nsText = attributed.string as NSString
         guard itemRange.location != NSNotFound, itemRange.length > 0 else { return nil }
         // One past the nine digits CommonMark allows is enough to see that a
         // longer run is not a marker at all.
@@ -231,35 +330,7 @@ private struct SourceHighlighter: MarkupVisitor {
         unichar(UInt8(ascii: character))
     }
 
-    // MARK: - Attribute application
-
-    private mutating func apply(kind: MarkdownNodeKind, range: NSRange, changeFont: Bool = true) {
-        attributed.addAttribute(.foregroundColor, value: style.color(for: kind), range: range)
-        if changeFont {
-            attributed.addAttribute(.font, value: style.font(for: kind), range: range)
-        }
-    }
-
-    private mutating func applyMonospacedPreservingTraits(kind: MarkdownNodeKind, range: NSRange) {
-        let monoFont = style.font(for: kind)
-        attributed.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
-            let existingTraits = (value as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
-            let newFont = style.withTraits(
-                monoFont,
-                bold: existingTraits.contains(.boldFontMask),
-                italic: existingTraits.contains(.italicFontMask)
-            )
-            attributed.addAttribute(.font, value: newFont, range: subRange)
-        }
-    }
-
-    private mutating func addTrait(bold: Bool, italic: Bool, range: NSRange) {
-        attributed.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
-            let currentFont = (value as? NSFont) ?? style.baseFont
-            let newFont = style.withTraits(currentFont, bold: bold, italic: italic)
-            attributed.addAttribute(.font, value: newFont, range: subRange)
-        }
-    }
+    // MARK: - Marker range
 
     /// The list marker ("-", "*", "+", or "1.") always sits at the very start
     /// of a list item's source range, and is followed by whitespace. Color
@@ -273,7 +344,6 @@ private struct SourceHighlighter: MarkupVisitor {
     /// since a rewritten numeral inherits the marker attributes wholesale
     /// while an untouched one kept the truncation.
     private func markerRange(within itemRange: NSRange) -> NSRange? {
-        let nsText = attributed.string as NSString
         guard itemRange.location != NSNotFound, itemRange.length > 0 else { return nil }
         let searchLength = min(itemRange.length, Self.longestOrderedMarkerLength)
         let prefix = nsText.substring(with: NSRange(location: itemRange.location, length: searchLength))

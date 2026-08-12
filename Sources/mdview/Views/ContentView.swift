@@ -10,6 +10,8 @@ struct ContentView: View {
 
     @Bindable private var preferences = Preferences.shared
     @State private var attributedText = NSAttributedString(string: "")
+    /// Survives across renders, so only the first one pays for parsing.
+    @State private var plans = StylePlanCache()
     @State private var isDarkAppearance = ContentView.appearanceIsDark()
 
     var body: some View {
@@ -110,6 +112,7 @@ struct ContentView: View {
 
     private func render() {
         attributedText = MarkdownRenderer.render(
+            plan: plans.plan(for: document.text),
             markdown: document.text,
             style: preferences.style(isDarkAppearance: isDarkAppearance),
             renumberOrderedLists: preferences.renumberOrderedLists
