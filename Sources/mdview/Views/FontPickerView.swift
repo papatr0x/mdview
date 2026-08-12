@@ -30,6 +30,7 @@ struct FontPickerView: View {
                 Text("Size: \(Int(preferences.fontSize)) pt")
             }
             Toggle("Bold headings", isOn: $preferences.boldHeadings)
+            Toggle("Renumber ordered lists", isOn: $preferences.renumberOrderedLists)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

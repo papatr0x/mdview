@@ -10,6 +10,7 @@ A lightweight, native macOS Markdown **viewer**. mdview shows Markdown files as 
 - **Appearance control** — follow the system, or force Light / Dark, independent of the rest of macOS.
 - **Font picker** — any installed font family and size; defaults to Courier New.
 - **Optional bold headings** toggle.
+- **Correct ordered-list numbering** — Markdown only reads the first item's number and ignores the rest, so lists are often written entirely as `1.`. mdview shows each item's real position (nested lists count independently), while leaving the delimiter you wrote (`.` or `)`) alone. Toggle it off for a strictly verbatim view.
 - **Read-only and scrollable** — `NSTextView`-backed for efficient rendering of large documents; text is selectable/copyable but not editable.
 - **One window per file** — each document gets its own window, scroll position, and title. Opening a file that is already open brings its window forward instead of duplicating it, and display settings are shared across every open window.
 - **Opens files three ways**: File > Open… (Cmd+O, with Open Recent), drag & drop onto a window, or double-click / "Open With" in Finder once registered as a `.md`/`.markdown` handler.
@@ -87,7 +88,7 @@ This quits mdview if it's running, removes `/Applications/mdview.app`, unregiste
 
 Open **mdview > Settings…** (Cmd+,):
 
-- **Font tab** — font family, size, and whether headings render bold.
+- **Font tab** — font family, size, whether headings render bold, and whether ordered lists are renumbered to their real positions.
 - **Colors tab** — appearance mode (System / Light / Dark), plus a color well per node type and the code block background, editable separately for the light and dark palettes.
 
 Preferences persist across launches and apply to every open window at once.

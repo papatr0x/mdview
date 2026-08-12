@@ -6,8 +6,22 @@ import Markdown
 /// verbatim, and colors/traits are layered on top of it per node type. This
 /// mirrors how a code editor colorizes source rather than how a browser
 /// renders HTML.
+///
+/// Ordered-list numerals are the one deliberate exception — see
+/// `renumberOrderedLists`.
 enum MarkdownRenderer {
-    static func render(markdown text: String, style: MarkdownStyle) -> NSAttributedString {
+    /// - Parameter renumberOrderedLists: Displays each ordered-list item with
+    ///   its actual position instead of the numeral written in the file.
+    ///   CommonMark only reads the *first* item's number (it sets where the
+    ///   list starts) and ignores every one after it, so a list written
+    ///   entirely as `1.` is both perfectly valid and unreadable as a list.
+    ///   This is the only place mdview alters the source text; the "Renumber
+    ///   ordered lists" setting turns it off for a strictly verbatim view.
+    static func render(
+        markdown text: String,
+        style: MarkdownStyle,
+        renumberOrderedLists: Bool = true
+    ) -> NSAttributedString {
         let attributed = NSMutableAttributedString(
             string: text,
             attributes: [
@@ -22,10 +36,30 @@ enum MarkdownRenderer {
             text: text,
             lineStartUTF8Offsets: Self.lineStartUTF8Offsets(in: text),
             style: style,
-            attributed: attributed
+            attributed: attributed,
+            renumberOrderedLists: renumberOrderedLists
         )
         highlighter.visit(document)
+        Self.apply(highlighter.renumberings, to: highlighter.attributed)
         return highlighter.attributed
+    }
+
+    /// Rewriting a numeral changes the string's length, which would invalidate
+    /// every range the visitor recorded against the *original* text. Applying
+    /// the edits back to front — after the walk, never during it — means each
+    /// range is still accurate at the moment it is used, since an edit only
+    /// shifts the text that follows it.
+    private static func apply(_ renumberings: [Renumbering], to attributed: NSMutableAttributedString) {
+        for renumbering in renumberings.sorted(by: { $0.range.location > $1.range.location }) {
+            guard NSMaxRange(renumbering.range) <= attributed.length else { continue }
+            // The replacement inherits the marker's own attributes, so the new
+            // digits keep the list-marker color and font already resolved.
+            let attributes = attributed.attributes(at: renumbering.range.location, effectiveRange: nil)
+            attributed.replaceCharacters(
+                in: renumbering.range,
+                with: NSAttributedString(string: renumbering.replacement, attributes: attributes)
+            )
+        }
     }
 
     private static func lineStartUTF8Offsets(in text: String) -> [Int] {
@@ -41,6 +75,13 @@ enum MarkdownRenderer {
     }
 }
 
+/// A pending rewrite of one ordered-list numeral: the range of the digits as
+/// they appear in the source, and the number to show in their place.
+private struct Renumbering {
+    let range: NSRange
+    let replacement: String
+}
+
 private struct SourceHighlighter: MarkupVisitor {
     typealias Result = Void
 
@@ -48,6 +89,10 @@ private struct SourceHighlighter: MarkupVisitor {
     let lineStartUTF8Offsets: [Int]
     let style: MarkdownStyle
     var attributed: NSMutableAttributedString
+    let renumberOrderedLists: Bool
+
+    /// Collected during the walk, applied by the caller once it finishes.
+    var renumberings: [Renumbering] = []
 
     // MARK: - Leaf / whole-range coloring
 
@@ -126,6 +171,60 @@ private struct SourceHighlighter: MarkupVisitor {
             apply(kind: .listMarker, range: markerRange, changeFont: false)
         }
         for child in listItem.children { visit(child) }
+    }
+
+    /// Each `OrderedList` node carries its own counter, so a nested list
+    /// restarts rather than continuing its parent's numbering.
+    mutating func visitOrderedList(_ orderedList: OrderedList) {
+        // CommonMark takes the start from the first item's numeral and ignores
+        // the rest, which is exactly the rule being made visible here.
+        var number = orderedList.startIndex
+        for item in orderedList.listItems {
+            if renumberOrderedLists {
+                recordRenumbering(of: item, to: number)
+            }
+            number += 1
+            visit(item)
+        }
+    }
+
+    private mutating func recordRenumbering(of listItem: ListItem, to number: UInt) {
+        guard let itemRange = nsRange(for: listItem),
+              let digits = digitsRange(atStartOf: itemRange) else { return }
+        let replacement = String(number)
+        guard (attributed.string as NSString).substring(with: digits) != replacement else { return }
+        renumberings.append(Renumbering(range: digits, replacement: replacement))
+    }
+
+    /// The digits of an ordered marker, without the `.`/`)` that follows them —
+    /// leaving the delimiter alone is what keeps a `1)` list numbered `2)`
+    /// rather than silently converted to `2.`.
+    ///
+    /// Returns nil unless the item really does start with digits followed by a
+    /// delimiter: text this function does not positively recognize is never
+    /// rewritten.
+    private func digitsRange(atStartOf itemRange: NSRange) -> NSRange? {
+        let nsText = attributed.string as NSString
+        guard itemRange.location != NSNotFound, itemRange.length > 0 else { return nil }
+        // CommonMark caps ordered markers at nine digits; one past that is
+        // enough to see that a longer run is not a marker at all.
+        let limit = min(itemRange.length, 10)
+        var length = 0
+        while length < limit, isASCIIDigit(nsText.character(at: itemRange.location + length)) {
+            length += 1
+        }
+        guard length > 0, length < itemRange.length else { return nil }
+        let delimiter = nsText.character(at: itemRange.location + length)
+        guard delimiter == Self.utf16(".") || delimiter == Self.utf16(")") else { return nil }
+        return NSRange(location: itemRange.location, length: length)
+    }
+
+    private func isASCIIDigit(_ character: unichar) -> Bool {
+        character >= Self.utf16("0") && character <= Self.utf16("9")
+    }
+
+    private static func utf16(_ character: Unicode.Scalar) -> unichar {
+        unichar(UInt8(ascii: character))
     }
 
     // MARK: - Attribute application

@@ -162,11 +162,20 @@ final class MarkdownRendererTests: XCTestCase {
         XCTAssertNotEqual(lightColor, darkColor)
     }
 
+    /// Rendered with ordered-list renumbering off, so this asserts the core
+    /// invariant — highlighting alone never rewrites text — rather than
+    /// relying on the fixture's list happening to be numbered correctly.
+    /// Renumbering, the one sanctioned exception, is covered by
+    /// `OrderedListNumberingTests`.
     func testRenderingPreservesOriginalSourceTextVerbatim() {
         let text = (try? String(contentsOf: sampleURL, encoding: .utf8)) ?? ""
         XCTAssertFalse(text.isEmpty, "sample.md fixture should be readable")
 
-        let attributed = MarkdownRenderer.render(markdown: text, style: style())
+        let attributed = MarkdownRenderer.render(
+            markdown: text,
+            style: style(),
+            renumberOrderedLists: false
+        )
         XCTAssertEqual(attributed.string, text, "highlighting must not alter the source text")
     }
 }

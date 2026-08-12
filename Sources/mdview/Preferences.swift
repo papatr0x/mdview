@@ -55,6 +55,12 @@ final class Preferences {
         didSet { defaults.set(boldHeadings, forKey: Keys.boldHeadings) }
     }
 
+    /// Shows ordered-list items with their real position instead of the
+    /// numeral written in the file. Off means a strictly verbatim view.
+    var renumberOrderedLists: Bool {
+        didSet { defaults.set(renumberOrderedLists, forKey: Keys.renumberOrderedLists) }
+    }
+
     var appearanceMode: AppearanceMode {
         didSet {
             defaults.set(appearanceMode.rawValue, forKey: Keys.appearanceMode)
@@ -72,6 +78,7 @@ final class Preferences {
         static let fontSize = "mdview.fontSize"
         static let colorTheme = "mdview.colorTheme"
         static let boldHeadings = "mdview.boldHeadings"
+        static let renumberOrderedLists = "mdview.renumberOrderedLists"
         static let appearanceMode = "mdview.appearanceMode"
     }
 
@@ -80,6 +87,7 @@ final class Preferences {
         let storedSize = defaults.double(forKey: Keys.fontSize)
         fontSize = storedSize > 0 ? CGFloat(storedSize) : 13
         boldHeadings = defaults.object(forKey: Keys.boldHeadings) as? Bool ?? true
+        renumberOrderedLists = defaults.object(forKey: Keys.renumberOrderedLists) as? Bool ?? true
         appearanceMode = defaults.string(forKey: Keys.appearanceMode)
             .flatMap(AppearanceMode.init(rawValue:)) ?? .system
 

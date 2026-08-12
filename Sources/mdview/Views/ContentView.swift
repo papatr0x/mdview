@@ -28,6 +28,7 @@ struct ContentView: View {
         .onChange(of: preferences.fontFamily) { render() }
         .onChange(of: preferences.fontSize) { render() }
         .onChange(of: preferences.boldHeadings) { render() }
+        .onChange(of: preferences.renumberOrderedLists) { render() }
         .onChange(of: preferences.colorTheme) { render() }
     }
 
@@ -55,7 +56,8 @@ struct ContentView: View {
     private func render() {
         attributedText = MarkdownRenderer.render(
             markdown: document.text,
-            style: preferences.style(isDarkAppearance: isDarkAppearance)
+            style: preferences.style(isDarkAppearance: isDarkAppearance),
+            renumberOrderedLists: preferences.renumberOrderedLists
         )
     }
 }
