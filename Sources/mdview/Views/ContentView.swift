@@ -116,10 +116,36 @@ struct ContentView: View {
         return true
     }
 
+    /// Repaints from the plan already in hand, or — the first time this
+    /// document is shown — lets the window come up and paints once the parse
+    /// finishes.
+    ///
+    /// Parsing is the expensive half, and doing it inline was what held up the
+    /// first frame at launch: macOS restores every window that was open when
+    /// the app last quit, each one parsed in turn on the main thread, and
+    /// nothing at all was drawn until the last of them finished. So a small
+    /// document waited on a large one it had nothing to do with. Off the main
+    /// thread they parse alongside each other and each window appears at once.
     private func render() {
+        let text = document.text
+        if let plan = plans.cachedPlan(for: text) {
+            paint(plan, of: text)
+            return
+        }
+        // Explicitly on the main actor: painting resolves NSFont/NSColor and
+        // writes view state, neither of which may happen on the parse's thread.
+        Task { @MainActor in
+            let plan = await plans.plan(for: text)
+            paint(plan, of: text)
+        }
+    }
+
+    /// Settings can move while a parse runs, so the style is read here rather
+    /// than captured when the parse started.
+    private func paint(_ plan: StylePlan, of text: String) {
         attributedText = MarkdownRenderer.render(
-            plan: plans.plan(for: document.text),
-            markdown: document.text,
+            plan: plan,
+            markdown: text,
             style: preferences.style(isDarkAppearance: isDarkAppearance),
             renumberOrderedLists: preferences.renumberOrderedLists
         )

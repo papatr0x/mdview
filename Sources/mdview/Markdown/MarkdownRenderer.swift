@@ -9,7 +9,11 @@ import Markdown
 /// `NSRange`. Changing a color or the font size does not change any of it, so
 /// a plan is built once per document and replayed against whatever
 /// `MarkdownStyle` is current (see `StylePlanCache`).
-struct StylePlan {
+///
+/// `Sendable` because it is built on a background thread and handed to the main
+/// one: it is all value types, and it carries no resolved color or font — only
+/// what the source says.
+struct StylePlan: Sendable {
     fileprivate let operations: [StyleOperation]
     fileprivate let renumberings: [Renumbering]
 }
@@ -207,7 +211,7 @@ enum MarkdownRenderer {
 
 /// One styling decision, recorded without resolving it: which range, and what
 /// to do to it. Colors and fonts come later, from whatever style is current.
-private enum StyleOperation {
+private enum StyleOperation: Sendable {
     case style(kind: MarkdownNodeKind, range: NSRange, changeFont: Bool)
     case codeBlockBackground(NSRange)
     case underline(NSRange)
@@ -220,7 +224,7 @@ private enum StyleOperation {
 
 /// A pending rewrite of one ordered-list numeral: the range of the digits as
 /// they appear in the source, and the number to show in their place.
-private struct Renumbering {
+private struct Renumbering: Sendable {
     let range: NSRange
     let replacement: String
 }
