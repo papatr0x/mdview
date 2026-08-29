@@ -171,13 +171,34 @@ enum MarkdownRenderer {
         }
     }
 
+    /// Where every line begins, in UTF-8 bytes — the table that turns the
+    /// parser's line/column positions back into offsets in the source.
+    ///
+    /// All three endings count, the same three the parser recognizes: LF, CRLF,
+    /// and a lone CR. Counting only LF left a CR-terminated file looking like a
+    /// single enormous line, so every position the parser reported past the
+    /// first line fell outside the table and its node went unstyled — the whole
+    /// document rendering as flat body text, with no error to show for it.
     private static func lineStartUTF8Offsets(in text: String) -> [Int] {
         var offsets = [0]
         var count = 0
+        var previousByteWasCarriageReturn = false
         for byte in text.utf8 {
             count += 1
             if byte == UInt8(ascii: "\n") {
+                if previousByteWasCarriageReturn {
+                    // CRLF is one ending, not two: correct the start the CR
+                    // just recorded rather than adding an empty line.
+                    offsets[offsets.count - 1] = count
+                } else {
+                    offsets.append(count)
+                }
+                previousByteWasCarriageReturn = false
+            } else if byte == UInt8(ascii: "\r") {
                 offsets.append(count)
+                previousByteWasCarriageReturn = true
+            } else {
+                previousByteWasCarriageReturn = false
             }
         }
         return offsets

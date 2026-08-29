@@ -208,6 +208,29 @@ final class RobustnessTests: XCTestCase {
         XCTAssertTrue(try TextDecoder.decode(withStrayNul).contains("mostly ASCII"))
     }
 
+    /// Line starts were counted by LF alone, so a file using classic-Mac CR
+    /// endings looked like one enormous line: every position the parser reported
+    /// past the first line fell outside the table and its node went unstyled,
+    /// leaving the document flat with nothing to show for it.
+    func testCarriageReturnLineEndingsAreStyled() {
+        let source = "# Head\r\rBody text\r\r- item one\r- item two\r"
+        let attributed = MarkdownRenderer.render(markdown: source, style: style())
+
+        XCTAssertEqual(charactersColored(style().color(for: .heading1), in: attributed), 6)
+        // One "-" per item, both of them past the first line.
+        XCTAssertEqual(charactersColored(style().color(for: .listMarker), in: attributed), 2)
+    }
+
+    /// CRLF is one line ending, not two — recording a start for each half would
+    /// shift every line number after the first by a growing amount.
+    func testCRLFLineEndingsAreStyled() {
+        let source = "# Head\r\n\r\nBody text\r\n\r\n- item one\r\n- item two\r\n"
+        let attributed = MarkdownRenderer.render(markdown: source, style: style())
+
+        XCTAssertEqual(charactersColored(style().color(for: .heading1), in: attributed), 6)
+        XCTAssertEqual(charactersColored(style().color(for: .listMarker), in: attributed), 2)
+    }
+
     func testASCIIDecodesVerbatim() throws {
         let original = "# Plain Heading\n\n- item\n\n```\ncode\n```\n"
         let data = try XCTUnwrap(original.data(using: .ascii))
