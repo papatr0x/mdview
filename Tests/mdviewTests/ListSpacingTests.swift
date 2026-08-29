@@ -148,4 +148,64 @@ final class ListSpacingTests: XCTestCase {
             source
         )
     }
+
+    // MARK: - Full-width code-block background
+
+    /// The manual full-width fill takes its width from the line fragment and
+    /// its height from the used rect. The fragment also contains whatever
+    /// paragraph spacing sits above the line, so filling it painted the gap a
+    /// list item reserves — visible as a band of code-block background hanging
+    /// above a fenced block that opens an item (`- ` and the fence on one line).
+    func testFullWidthFillTakesWidthFromFragmentAndHeightFromUsedRect() {
+        let fragment = NSRect(x: 0, y: 30, width: 600, height: 27)
+        let used = NSRect(x: 0, y: 42, width: 48, height: 15)
+
+        let fill = AppearanceAwareTextView.fullWidthFillRect(fragment: fragment, used: used)
+
+        XCTAssertEqual(fill.width, 600, "the fill has to span the line, not the glyphs")
+        XCTAssertEqual(fill.minY, 42, "it must start below the paragraph spacing")
+        XCTAssertEqual(fill.height, 15, "and cover the line only, not the gap above it")
+    }
+
+    /// With no spacing the two rects coincide, so nothing about the existing
+    /// fenced-block background changes.
+    func testFullWidthFillIsUnchangedWithoutSpacing() {
+        let fragment = NSRect(x: 0, y: 30, width: 600, height: 15)
+        let used = NSRect(x: 0, y: 30, width: 48, height: 15)
+
+        XCTAssertEqual(
+            AppearanceAwareTextView.fullWidthFillRect(fragment: fragment, used: used),
+            NSRect(x: 0, y: 30, width: 600, height: 15)
+        )
+    }
+
+    /// The layout fact the two tests above are built on: a list item's first
+    /// line really does get a taller fragment than used rect once it carries
+    /// spacing, and that line really is where a fence opening an item lives.
+    func testItemOpeningFenceGetsATallerFragmentThanUsedRect() {
+        let source = "Intro\n\n- ```\n  code\n  ```\n"
+        let attributed = MarkdownRenderer.render(markdown: source, style: style(spacing: 12))
+
+        let storage = NSTextStorage(attributedString: attributed)
+        let layoutManager = NSLayoutManager()
+        let container = NSTextContainer(size: NSSize(width: 600, height: 100_000))
+        layoutManager.addTextContainer(container)
+        storage.addLayoutManager(layoutManager)
+        layoutManager.ensureLayout(for: container)
+
+        let fenceLocation = (attributed.string as NSString).range(of: "- ```").location
+        XCTAssertNotEqual(fenceLocation, NSNotFound)
+        XCTAssertNotNil(
+            attributed.attribute(.backgroundColor, at: fenceLocation + 2, effectiveRange: nil),
+            "the opening fence is part of the code block, background and all"
+        )
+
+        let glyph = layoutManager.glyphIndexForCharacter(at: fenceLocation)
+        var used = NSRange()
+        let fragment = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        let usedRect = layoutManager.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: &used)
+
+        XCTAssertEqual(fragment.height - usedRect.height, 12, accuracy: 0.5,
+                       "the fragment carries the item's 12 pt of spacing, the used rect does not")
+    }
 }

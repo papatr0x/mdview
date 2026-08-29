@@ -22,6 +22,19 @@ final class AppearanceAwareTextView: NSTextView {
         }
     }
 
+    /// Full width from the line fragment, height from the used rect.
+    ///
+    /// The fragment is the taller of the two whenever the line carries
+    /// paragraph spacing — the space a list item reserves above itself lives
+    /// inside its first line's fragment. Filling the fragment therefore painted
+    /// that gap as well, which shows as a band of code-block background hanging
+    /// above a fenced block that opens a list item (`- ` and the opening fence
+    /// on one line). Without spacing the two rects are identical, so this
+    /// changes nothing anywhere else.
+    static func fullWidthFillRect(fragment: NSRect, used: NSRect) -> NSRect {
+        NSRect(x: fragment.minX, y: used.minY, width: fragment.width, height: used.height)
+    }
+
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
         drawFullWidthBackgrounds(in: rect)
@@ -68,8 +81,9 @@ final class AppearanceAwareTextView: NSTextView {
             guard let color = value as? NSColor, range.length > 0 else { return }
             let runGlyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             color.setFill()
-            layoutManager.enumerateLineFragments(forGlyphRange: runGlyphs) { lineRect, _, _, _, _ in
-                NSBezierPath(rect: lineRect.offsetBy(dx: origin.x, dy: origin.y)).fill()
+            layoutManager.enumerateLineFragments(forGlyphRange: runGlyphs) { lineRect, usedRect, _, _, _ in
+                let fill = Self.fullWidthFillRect(fragment: lineRect, used: usedRect)
+                NSBezierPath(rect: fill.offsetBy(dx: origin.x, dy: origin.y)).fill()
             }
         }
     }
