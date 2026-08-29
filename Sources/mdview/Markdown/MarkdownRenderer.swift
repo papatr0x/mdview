@@ -28,7 +28,8 @@ struct StylePlan: Sendable {
 /// Ordered-list numerals are the one deliberate exception — see
 /// `renumberOrderedLists`.
 extension NSAttributedString.Key {
-    /// Marks the `**`/`*`/`_` around bold and italic text. It carries no
+    /// Marks the `**`/`*`/`_` around emphasis and the backticks around inline
+    /// code. It carries no
     /// appearance of its own: `AppearanceAwareTextView` reads it while
     /// generating glyphs and gives those characters no glyph at all, which is
     /// what hides them without touching a single character of the source.
@@ -66,10 +67,11 @@ enum MarkdownRenderer {
     ///   ordered lists" setting turns it off for a strictly verbatim view.
     ///   The rewrites are part of every plan — they depend on the text, not on
     ///   the style — so toggling the setting does not invalidate a cached plan.
-    /// - Parameter hideEmphasisDelimiters: Leaves the `**`, `*` and `_` around
-    ///   bold and italic text undrawn, so emphasis reads as emphasis instead of
-    ///   competing with its own markers — which is what they did, since the
-    ///   trait covers the node's whole range and rendered them bold too. Unlike
+    /// - Parameter hideInlineDelimiters: Leaves the `**`, `*` and `_` around
+    ///   bold and italic text undrawn, and the backticks around inline code
+    ///   with them, so the markup reads as what it marks instead of competing
+    ///   with its own markers — which is what they did, since a node's style
+    ///   covers its whole range and rendered them bold, or as code, too. Unlike
     ///   the renumbering above, this alters no text: the marked characters stay
     ///   in the string and are dropped at glyph generation, so the document is
     ///   still the file and copying still yields the markers.
@@ -78,7 +80,7 @@ enum MarkdownRenderer {
         markdown text: String,
         style: MarkdownStyle,
         renumberOrderedLists: Bool = true,
-        hideEmphasisDelimiters: Bool = true
+        hideInlineDelimiters: Bool = true
     ) -> NSAttributedString {
         let attributed = NSMutableAttributedString(
             string: text,
@@ -96,7 +98,7 @@ enum MarkdownRenderer {
                 listItemParagraphStyle: listItemParagraphStyle
             )
         }
-        if hideEmphasisDelimiters {
+        if hideInlineDelimiters {
             // Nothing is written when the setting is off, so switching it back
             // restores exactly the attributed string that came before it.
             for range in plan.hiddenDelimiters {
@@ -114,14 +116,14 @@ enum MarkdownRenderer {
         markdown text: String,
         style: MarkdownStyle,
         renumberOrderedLists: Bool = true,
-        hideEmphasisDelimiters: Bool = true
+        hideInlineDelimiters: Bool = true
     ) -> NSAttributedString {
         render(
             plan: plan(for: text),
             markdown: text,
             style: style,
             renumberOrderedLists: renumberOrderedLists,
-            hideEmphasisDelimiters: hideEmphasisDelimiters
+            hideInlineDelimiters: hideInlineDelimiters
         )
     }
 
@@ -313,6 +315,9 @@ private struct SourcePlanner: MarkupVisitor {
         if let range = nsRange(for: inlineCode) {
             operations.append(.style(kind: .inlineCode, range: range, changeFont: false))
             operations.append(.monospacedPreservingTraits(kind: .inlineCode, range: range))
+            // A span may be fenced by any number of backticks, so the run is
+            // measured here the same way it is for emphasis.
+            recordDelimiters(of: range, minimumWidth: 1)
         }
     }
 
@@ -334,7 +339,7 @@ private struct SourcePlanner: MarkupVisitor {
         for child in emphasis.children { visit(child) }
     }
 
-    // MARK: - Emphasis delimiters
+    // MARK: - Inline delimiters
 
     private mutating func recordDelimiters(of nodeRange: NSRange, minimumWidth: Int) {
         guard let (opening, closing) = delimiterRanges(of: nodeRange, minimumWidth: minimumWidth)
@@ -343,7 +348,7 @@ private struct SourcePlanner: MarkupVisitor {
         hiddenDelimiters.append(closing)
     }
 
-    /// The run of `*` or `_` at each end of an emphasis node.
+    /// The run of `*`, `_` or `` ` `` at each end of an inline node.
     ///
     /// swift-markdown reports where a node is but not where its delimiters are,
     /// so they are read back off the source. The run is *measured* rather than
@@ -362,8 +367,12 @@ private struct SourcePlanner: MarkupVisitor {
               nodeRange.length > 2 * minimumWidth,
               NSMaxRange(nodeRange) <= nsText.length else { return nil }
 
+        // Read from the node's own first character: each caller's node type
+        // only ever opens with its own kind, so one set covers all three.
         let delimiter = nsText.character(at: nodeRange.location)
-        guard delimiter == Self.utf16("*") || delimiter == Self.utf16("_") else { return nil }
+        guard delimiter == Self.utf16("*")
+                || delimiter == Self.utf16("_")
+                || delimiter == Self.utf16("`") else { return nil }
 
         // Bounded by half the node, so the two runs can never meet and swallow
         // what is between them — and bounded by the node either way, which is

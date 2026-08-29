@@ -2,12 +2,13 @@ import AppKit
 import XCTest
 @testable import mdview
 
-/// Hiding the `**`/`*`/`_` around emphasis is a *layout* change, not a text one:
-/// the characters stay in the string and are dropped when glyphs are generated.
-/// These pin both halves — which characters get marked, and that the marked ones
-/// really produce no glyph — and, above all, that the document is still the file.
+/// Hiding the `**`/`*`/`_` around emphasis and the backticks around inline code
+/// is a *layout* change, not a text one: the characters stay in the string and
+/// are dropped when glyphs are generated. These pin both halves — which
+/// characters get marked, and that the marked ones really produce no glyph —
+/// and, above all, that the document is still the file.
 @MainActor
-final class EmphasisDelimiterTests: XCTestCase {
+final class InlineDelimiterTests: XCTestCase {
     private func style() -> MarkdownStyle {
         MarkdownStyle(
             theme: .default,
@@ -56,15 +57,16 @@ final class EmphasisDelimiterTests: XCTestCase {
         for (source, expected) in [("a **bold** b", "**|**"),
                                    ("a __bold__ b", "__|__"),
                                    ("a *italic* b", "*|*"),
-                                   ("a _italic_ b", "_|_")] {
+                                   ("a _italic_ b", "_|_"),
+                                   ("a `code` b", "`|`"),
+                                   ("a ``code`` b", "``|``"),
+                                   ("a `` ` `` b", "``|``")] {
             let attributed = MarkdownRenderer.render(markdown: source, style: style())
             XCTAssertEqual(hiddenText(in: attributed), expected, "for \(source)")
         }
     }
 
-    /// The delimiters are taken from the outside in, so whichever node is
-    /// outermost claims its own characters and leaves the rest to the one nested
-    /// inside. All six asterisks go; the word between them stays.
+    /// All six asterisks go; the word between them stays.
     func testBoldItalicHidesAllSixAsterisksAndNothingElse() {
         let source = "***both***"
         let attributed = MarkdownRenderer.render(markdown: source, style: style())
@@ -75,13 +77,39 @@ final class EmphasisDelimiterTests: XCTestCase {
                      "the word itself must stay visible")
     }
 
-    /// Only real emphasis nodes are touched. Asterisks that are content — inside
-    /// inline code or a fenced block — are not emphasis at all and stay put.
-    func testAsterisksThatAreNotEmphasisStayVisible() {
-        for source in ["a `**not bold**` b\n", "```\n**not bold**\n```\n", "2 * 3 * 4\n"] {
+    /// Only the delimiters of a real inline node are touched. Inside a code
+    /// span the asterisks are content, so the backticks go and they stay.
+    func testMarkupInsideCodeIsLeftAlone() {
+        let source = "a `**not bold**` b\n"
+        let attributed = MarkdownRenderer.render(markdown: source, style: style())
+
+        XCTAssertEqual(hiddenText(in: attributed), "`|`")
+        for characterIndex in [3, 4, 13, 14] {
+            XCTAssertNil(
+                attributed.attribute(.hiddenMarkdownDelimiter, at: characterIndex, effectiveRange: nil),
+                "the asterisk at \(characterIndex) is code content, not a marker"
+            )
+        }
+    }
+
+    /// Characters that never belonged to an inline node stay put: a fenced
+    /// block's own fences are not a code *span*, and loose asterisks are text.
+    func testCharactersOutsideAnInlineNodeStayVisible() {
+        for source in ["```\n**not bold**\n```\n", "2 * 3 * 4\n", "a ` b\n"] {
             let attributed = MarkdownRenderer.render(markdown: source, style: style())
             XCTAssertEqual(hiddenRanges(in: attributed), [], "for \(source.debugDescription)")
         }
+    }
+
+    /// A code span inside bold: each node claims its own delimiters and the two
+    /// pairs never overlap. They do sit flush against each other, so each end
+    /// comes back as one merged run rather than two.
+    func testCodeInsideBoldHidesBothPairs() {
+        let source = "a **`code`** b"
+        let attributed = MarkdownRenderer.render(markdown: source, style: style())
+
+        XCTAssertEqual(hiddenText(in: attributed), "**`|`**")
+        XCTAssertEqual(attributed.string, source)
     }
 
     // MARK: - The document is still the file
@@ -104,14 +132,14 @@ final class EmphasisDelimiterTests: XCTestCase {
     /// is attribute-for-attribute the one that came before the feature existed.
     func testDisablingLeavesTheRenderUntouched() {
         let source = "Some **bold** and *italic* text.\n"
-        let off = MarkdownRenderer.render(markdown: source, style: style(), hideEmphasisDelimiters: false)
+        let off = MarkdownRenderer.render(markdown: source, style: style(), hideInlineDelimiters: false)
 
         XCTAssertEqual(hiddenRanges(in: off), [])
         XCTAssertTrue(off.isEqual(to: MarkdownRenderer.render(
             plan: MarkdownRenderer.plan(for: source),
             markdown: source,
             style: style(),
-            hideEmphasisDelimiters: false
+            hideInlineDelimiters: false
         )))
     }
 
@@ -122,9 +150,9 @@ final class EmphasisDelimiterTests: XCTestCase {
         let plan = MarkdownRenderer.plan(for: source)
 
         let on = MarkdownRenderer.render(plan: plan, markdown: source, style: style(),
-                                         hideEmphasisDelimiters: true)
+                                         hideInlineDelimiters: true)
         let off = MarkdownRenderer.render(plan: plan, markdown: source, style: style(),
-                                          hideEmphasisDelimiters: false)
+                                          hideInlineDelimiters: false)
 
         XCTAssertEqual(hiddenText(in: on), "**|**")
         XCTAssertEqual(hiddenRanges(in: off), [])
@@ -151,7 +179,7 @@ final class EmphasisDelimiterTests: XCTestCase {
         let textView = AppearanceAwareTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
         textView.layoutManager?.delegate = textView
         textView.textStorage?.setAttributedString(
-            MarkdownRenderer.render(markdown: source, style: style(), hideEmphasisDelimiters: hiding)
+            MarkdownRenderer.render(markdown: source, style: style(), hideInlineDelimiters: hiding)
         )
         if let container = textView.textContainer {
             textView.layoutManager?.ensureLayout(for: container)
