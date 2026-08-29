@@ -16,6 +16,7 @@ import Markdown
 struct StylePlan: Sendable {
     fileprivate let operations: [StyleOperation]
     fileprivate let renumberings: [Renumbering]
+    fileprivate let hiddenDelimiters: [NSRange]
 }
 
 /// Renders markdown as **syntax-highlighted source**, not a WYSIWYG preview:
@@ -26,17 +27,31 @@ struct StylePlan: Sendable {
 ///
 /// Ordered-list numerals are the one deliberate exception — see
 /// `renumberOrderedLists`.
+extension NSAttributedString.Key {
+    /// Marks the `**`/`*`/`_` around bold and italic text. It carries no
+    /// appearance of its own: `AppearanceAwareTextView` reads it while
+    /// generating glyphs and gives those characters no glyph at all, which is
+    /// what hides them without touching a single character of the source.
+    static let hiddenMarkdownDelimiter = NSAttributedString.Key("mdviewHiddenMarkdownDelimiter")
+}
+
 enum MarkdownRenderer {
     /// Parses `text` and works out what to style, without deciding any colors.
     static func plan(for text: String) -> StylePlan {
-        guard !text.isEmpty else { return StylePlan(operations: [], renumberings: []) }
+        guard !text.isEmpty else {
+            return StylePlan(operations: [], renumberings: [], hiddenDelimiters: [])
+        }
 
         var planner = SourcePlanner(
             text: text,
             lineStartUTF8Offsets: Self.lineStartUTF8Offsets(in: text)
         )
         planner.visit(Document(parsing: text))
-        return StylePlan(operations: planner.operations, renumberings: planner.renumberings)
+        return StylePlan(
+            operations: planner.operations,
+            renumberings: planner.renumberings,
+            hiddenDelimiters: planner.hiddenDelimiters
+        )
     }
 
     /// Paints a plan with a concrete style. Cheap enough to redo on every
@@ -51,11 +66,19 @@ enum MarkdownRenderer {
     ///   ordered lists" setting turns it off for a strictly verbatim view.
     ///   The rewrites are part of every plan — they depend on the text, not on
     ///   the style — so toggling the setting does not invalidate a cached plan.
+    /// - Parameter hideEmphasisDelimiters: Leaves the `**`, `*` and `_` around
+    ///   bold and italic text undrawn, so emphasis reads as emphasis instead of
+    ///   competing with its own markers — which is what they did, since the
+    ///   trait covers the node's whole range and rendered them bold too. Unlike
+    ///   the renumbering above, this alters no text: the marked characters stay
+    ///   in the string and are dropped at glyph generation, so the document is
+    ///   still the file and copying still yields the markers.
     static func render(
         plan: StylePlan,
         markdown text: String,
         style: MarkdownStyle,
-        renumberOrderedLists: Bool = true
+        renumberOrderedLists: Bool = true,
+        hideEmphasisDelimiters: Bool = true
     ) -> NSAttributedString {
         let attributed = NSMutableAttributedString(
             string: text,
@@ -73,6 +96,13 @@ enum MarkdownRenderer {
                 listItemParagraphStyle: listItemParagraphStyle
             )
         }
+        if hideEmphasisDelimiters {
+            // Nothing is written when the setting is off, so switching it back
+            // restores exactly the attributed string that came before it.
+            for range in plan.hiddenDelimiters {
+                attributed.addAttribute(.hiddenMarkdownDelimiter, value: true, range: range)
+            }
+        }
         if renumberOrderedLists {
             Self.apply(plan.renumberings, to: attributed)
         }
@@ -83,13 +113,15 @@ enum MarkdownRenderer {
     static func render(
         markdown text: String,
         style: MarkdownStyle,
-        renumberOrderedLists: Bool = true
+        renumberOrderedLists: Bool = true,
+        hideEmphasisDelimiters: Bool = true
     ) -> NSAttributedString {
         render(
             plan: plan(for: text),
             markdown: text,
             style: style,
-            renumberOrderedLists: renumberOrderedLists
+            renumberOrderedLists: renumberOrderedLists,
+            hideEmphasisDelimiters: hideEmphasisDelimiters
         )
     }
 
@@ -238,6 +270,7 @@ private struct SourcePlanner: MarkupVisitor {
 
     var operations: [StyleOperation] = []
     var renumberings: [Renumbering] = []
+    var hiddenDelimiters: [NSRange] = []
 
     private var nsText: NSString { text as NSString }
 
@@ -287,6 +320,7 @@ private struct SourcePlanner: MarkupVisitor {
         if let range = nsRange(for: strong) {
             operations.append(.style(kind: .strong, range: range, changeFont: false))
             operations.append(.trait(bold: true, italic: false, range: range))
+            recordDelimiters(of: range, minimumWidth: 2)
         }
         for child in strong.children { visit(child) }
     }
@@ -295,8 +329,63 @@ private struct SourcePlanner: MarkupVisitor {
         if let range = nsRange(for: emphasis) {
             operations.append(.style(kind: .emphasis, range: range, changeFont: false))
             operations.append(.trait(bold: false, italic: true, range: range))
+            recordDelimiters(of: range, minimumWidth: 1)
         }
         for child in emphasis.children { visit(child) }
+    }
+
+    // MARK: - Emphasis delimiters
+
+    private mutating func recordDelimiters(of nodeRange: NSRange, minimumWidth: Int) {
+        guard let (opening, closing) = delimiterRanges(of: nodeRange, minimumWidth: minimumWidth)
+        else { return }
+        hiddenDelimiters.append(opening)
+        hiddenDelimiters.append(closing)
+    }
+
+    /// The run of `*` or `_` at each end of an emphasis node.
+    ///
+    /// swift-markdown reports where a node is but not where its delimiters are,
+    /// so they are read back off the source. The run is *measured* rather than
+    /// assumed to be two characters for a `Strong` and one for an `Emphasis`,
+    /// because an emphasis nested directly inside another is handed the very
+    /// same range as its parent: in `***text***` the `Emphasis` and the `Strong`
+    /// within it both span all ten characters, and counting a fixed width there
+    /// left the innermost asterisk of each run on screen. Only siblings get
+    /// inset ranges, as the `Emphasis` inside `**a *b* c**` does.
+    ///
+    /// Returns nil unless both ends really are a run of the same delimiter, at
+    /// least as long as the node needs: whatever this does not positively
+    /// recognize stays visible.
+    private func delimiterRanges(of nodeRange: NSRange, minimumWidth: Int) -> (NSRange, NSRange)? {
+        guard nodeRange.location != NSNotFound,
+              nodeRange.length > 2 * minimumWidth,
+              NSMaxRange(nodeRange) <= nsText.length else { return nil }
+
+        let delimiter = nsText.character(at: nodeRange.location)
+        guard delimiter == Self.utf16("*") || delimiter == Self.utf16("_") else { return nil }
+
+        // Bounded by half the node, so the two runs can never meet and swallow
+        // what is between them — and bounded by the node either way, which is
+        // what leaves a literal asterisk just outside it alone.
+        let limit = nodeRange.length / 2
+        var opening = 0
+        while opening < limit, nsText.character(at: nodeRange.location + opening) == delimiter {
+            opening += 1
+        }
+        var closing = 0
+        while closing < limit, nsText.character(at: NSMaxRange(nodeRange) - 1 - closing) == delimiter {
+            closing += 1
+        }
+
+        // The shorter of the two: an asymmetric pair means one side is content.
+        let width = min(opening, closing)
+        guard width >= minimumWidth else { return nil }
+
+        return (
+            NSRange(location: nodeRange.location, length: width),
+            NSRange(location: NSMaxRange(nodeRange) - width, length: width)
+        )
     }
 
     mutating func visitLink(_ link: Link) {

@@ -4,7 +4,7 @@ import SwiftUI
 /// Reports appearance changes so its own window can re-highlight the text with
 /// the matching light/dark palette. Each document window owns one of these, so
 /// the callback is per-window rather than a call into shared state.
-final class AppearanceAwareTextView: NSTextView {
+final class AppearanceAwareTextView: NSTextView, NSLayoutManagerDelegate {
     var onAppearanceChange: ((Bool) -> Void)?
 
     var isDarkAppearance: Bool {
@@ -20,6 +20,52 @@ final class AppearanceAwareTextView: NSTextView {
         Task { @MainActor [weak self] in
             self?.onAppearanceChange?(isDark)
         }
+    }
+
+    /// Drops the glyphs for characters the renderer marked as emphasis
+    /// delimiters, so `**bold**` reads as bold rather than as bold asterisks
+    /// wrapped around bold text.
+    ///
+    /// Done here rather than by deleting the characters, which is the whole
+    /// point: a `.null` glyph is not drawn and takes no width, while the
+    /// character stays in the text storage. The document on screen is still the
+    /// file — selecting a bold phrase and copying it gives back the `**`, and
+    /// every range the renderer recorded still lines up with the source.
+    func layoutManager(
+        _ layoutManager: NSLayoutManager,
+        shouldGenerateGlyphs glyphs: UnsafePointer<CGGlyph>,
+        properties: UnsafePointer<NSLayoutManager.GlyphProperty>,
+        characterIndexes: UnsafePointer<Int>,
+        font: NSFont,
+        forGlyphRange glyphRange: NSRange
+    ) -> Int {
+        guard let textStorage, glyphRange.length > 0 else { return 0 }
+
+        var adjusted: [NSLayoutManager.GlyphProperty] = []
+        var hidAny = false
+        for offset in 0..<glyphRange.length {
+            let characterIndex = characterIndexes[offset]
+            let isDelimiter = characterIndex < textStorage.length
+                && textStorage.attribute(
+                    .hiddenMarkdownDelimiter,
+                    at: characterIndex,
+                    effectiveRange: nil
+                ) != nil
+            if isDelimiter { hidAny = true }
+            adjusted.append(isDelimiter ? .null : properties[offset])
+        }
+        // Returning 0 leaves the layout manager's own glyphs in place, which is
+        // both cheaper and safer than handing back a copy of what it gave us.
+        guard hidAny else { return 0 }
+
+        layoutManager.setGlyphs(
+            glyphs,
+            properties: adjusted,
+            characterIndexes: characterIndexes,
+            font: font,
+            forGlyphRange: glyphRange
+        )
+        return glyphRange.length
     }
 
     /// Full width from the line fragment, height from the used rect.
@@ -101,6 +147,9 @@ struct DocumentTextView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let textView = AppearanceAwareTextView()
         textView.onAppearanceChange = onAppearanceChange
+        // Weak on NSLayoutManager, so the view owning its own layout manager's
+        // delegate is not a retain cycle.
+        textView.layoutManager?.delegate = textView
         textView.isEditable = false
         textView.isSelectable = true
         textView.allowsUndo = false

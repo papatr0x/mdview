@@ -8,6 +8,8 @@ mdview is a native macOS Markdown **viewer** — not an editor, not a WYSIWYG/HT
 
 **The one sanctioned exception to "verbatim" is ordered-list numerals.** CommonMark reads only the *first* item's number (it sets where the list starts) and ignores every one after it, so a list written entirely as `1.` is valid markdown that renders as a column of `1.`s — unreadable as a list. mdview shows each item's real position instead, behind the "Renumber ordered lists" setting (default on; off restores a strictly verbatim view). This is the *only* place the source text is altered, and any new feature that wants to alter text should be weighed against that.
 
+**Hiding the emphasis markers is deliberately *not* a second exception.** The `**`, `*` and `_` around bold and italic text are not drawn, but they are still in the string: the renderer marks them with an `.hiddenMarkdownDelimiter` attribute and `AppearanceAwareTextView`, as the layout manager's delegate, gives those characters a `.null` glyph — no drawing, no width, character untouched. Deleting them would have been less code and was rejected for exactly this reason: copying a bold phrase out of the view still yields the `**` the file has, and every range the plan recorded still lines up with the source. Reach for the same trick before reaching for `replaceCharacters`.
+
 ## Commands
 
 ```sh

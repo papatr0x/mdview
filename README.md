@@ -10,6 +10,7 @@ A lightweight, native macOS Markdown **viewer**. mdview shows Markdown files as 
 - **Appearance control** — follow the system, or force Light / Dark, independent of the rest of macOS.
 - **Two fonts, separately configurable** — a body font for everything that is not code (any installed family, any size) and a fixed-width font for inline code and fenced blocks, with its own size. Cmd+ / Cmd- zoom both together.
 - **Optional bold headings** toggle.
+- **Hidden emphasis markers** — the `**`, `*` and `_` around bold and italic text are not drawn, so emphasis reads as emphasis instead of competing with its own markers. The characters are still there: they are skipped when glyphs are generated, so selecting a bold phrase and copying it gives back exactly what the file says. Toggle it off to see them again.
 - **Breathing room in lists** — a configurable amount of vertical space before every list item, ordered or not. Set it to 0 to switch it off. It is drawn as paragraph spacing, so the text itself is untouched.
 - **Correct ordered-list numbering** — Markdown only reads the first item's number and ignores the rest, so lists are often written entirely as `1.`. mdview shows each item's real position (nested lists count independently), while leaving the delimiter you wrote (`.` or `)`) alone. Toggle it off for a strictly verbatim view.
 - **Read-only and scrollable** — `NSTextView`-backed for efficient rendering of large documents; text is selectable/copyable but not editable.
@@ -89,7 +90,7 @@ This quits mdview if it's running, removes `/Applications/mdview.app`, unregiste
 
 Open **mdview > Settings…** (Cmd+,):
 
-- **Font tab** — body font family and size, code font family (fixed-width families only) and size, the space before list items, whether headings render bold, and whether ordered lists are renumbered to their real positions.
+- **Font tab** — body font family and size, code font family (fixed-width families only) and size, the space before list items, whether headings render bold, whether ordered lists are renumbered to their real positions, and whether the `**`/`*`/`_` around emphasis are drawn.
 - **Colors tab** — appearance mode (System / Light / Dark), plus a color well per node type and the code block background, editable separately for the light and dark palettes.
 
 Preferences persist across launches and apply to every open window at once.

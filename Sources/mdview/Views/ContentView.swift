@@ -67,6 +67,7 @@ struct ContentView: View {
             codeFontSize: preferences.codeFontSize,
             boldHeadings: preferences.boldHeadings,
             renumberOrderedLists: preferences.renumberOrderedLists,
+            hideEmphasisDelimiters: preferences.hideEmphasisDelimiters,
             listItemSpacing: preferences.listItemSpacing
         )
     }
@@ -79,6 +80,7 @@ struct ContentView: View {
         let codeFontSize: CGFloat
         let boldHeadings: Bool
         let renumberOrderedLists: Bool
+        let hideEmphasisDelimiters: Bool
         let listItemSpacing: CGFloat
     }
 
@@ -147,7 +149,8 @@ struct ContentView: View {
             plan: plan,
             markdown: text,
             style: preferences.style(isDarkAppearance: isDarkAppearance),
-            renumberOrderedLists: preferences.renumberOrderedLists
+            renumberOrderedLists: preferences.renumberOrderedLists,
+            hideEmphasisDelimiters: preferences.hideEmphasisDelimiters
         )
     }
 }

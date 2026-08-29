@@ -72,6 +72,13 @@ final class Preferences {
         didSet { defaults.set(renumberOrderedLists, forKey: Keys.renumberOrderedLists) }
     }
 
+    /// Leaves the `**`, `*` and `_` around bold and italic text undrawn. The
+    /// characters stay in the document either way — only the glyphs go — so off
+    /// simply shows them again.
+    var hideEmphasisDelimiters: Bool {
+        didSet { defaults.set(hideEmphasisDelimiters, forKey: Keys.hideEmphasisDelimiters) }
+    }
+
     /// Points of vertical space before each list item, ordered or not. Zero
     /// switches it off.
     var listItemSpacing: CGFloat {
@@ -101,6 +108,7 @@ final class Preferences {
         static let colorTheme = "mdview.colorTheme"
         static let boldHeadings = "mdview.boldHeadings"
         static let renumberOrderedLists = "mdview.renumberOrderedLists"
+        static let hideEmphasisDelimiters = "mdview.hideEmphasisDelimiters"
         static let listItemSpacing = "mdview.listItemSpacing"
         static let appearanceMode = "mdview.appearanceMode"
     }
@@ -136,6 +144,7 @@ final class Preferences {
             : CGFloat(defaults.double(forKey: Keys.listItemSpacing))
         boldHeadings = defaults.object(forKey: Keys.boldHeadings) as? Bool ?? true
         renumberOrderedLists = defaults.object(forKey: Keys.renumberOrderedLists) as? Bool ?? true
+        hideEmphasisDelimiters = defaults.object(forKey: Keys.hideEmphasisDelimiters) as? Bool ?? true
         appearanceMode = defaults.string(forKey: Keys.appearanceMode)
             .flatMap(AppearanceMode.init(rawValue:)) ?? .system
 

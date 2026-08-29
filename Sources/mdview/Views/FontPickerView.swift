@@ -49,6 +49,7 @@ struct FontPickerView: View {
 
             Toggle("Bold headings", isOn: $preferences.boldHeadings)
             Toggle("Renumber ordered lists", isOn: $preferences.renumberOrderedLists)
+            Toggle("Hide bold and italic markers", isOn: $preferences.hideEmphasisDelimiters)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
