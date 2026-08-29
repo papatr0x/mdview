@@ -99,16 +99,24 @@ struct ColorPalette: Codable, Equatable {
     /// light defaults would hand it a white page.
     init(from decoder: Decoder, fillingGapsFrom defaults: ColorPalette) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        colors = try container.decode([MarkdownNodeKind: RGBAColor].self, forKey: .colors)
+        // Node kinds are filled from the defaults the same way the backgrounds
+        // are, and for the same reason: a kind added after this theme was saved
+        // is simply missing from it. Without the fill it fell through to the
+        // *light* defaults — `color(for:)` has no way to know which appearance
+        // it belongs to — which in a dark palette meant black text on a black
+        // page for every newly added kind.
+        let stored = try container.decode(StoredColors.self, forKey: .colors)
+        colors = defaults.colors.merging(stored.colors) { _, saved in saved }
         background = try container.decodeIfPresent(RGBAColor.self, forKey: .background)
             ?? defaults.background
         codeBlockBackground = try container.decodeIfPresent(RGBAColor.self, forKey: .codeBlockBackground)
             ?? defaults.codeBlockBackground
     }
 
-    /// Falls back through: this palette → the light defaults → a semantic
-    /// system color, so a node kind missing from both maps degrades to
-    /// readable text rather than trapping.
+    /// A floor, not the gap-filling: a decoded palette already carries every
+    /// kind, filled from the defaults for its own appearance. What is left here
+    /// is the case of a palette built in code with a kind left out, which
+    /// degrades to readable text rather than trapping.
     func color(for kind: MarkdownNodeKind) -> NSColor {
         (colors[kind] ?? ColorPalette.defaultLight.colors[kind])?.nsColor ?? .labelColor
     }
@@ -154,6 +162,33 @@ struct ColorPalette: Codable, Equatable {
         .listMarker: RGBAColor(red: 0.75, green: 0.75, blue: 0.75),
         .thematicBreak: RGBAColor(red: 0.5, green: 0.5, blue: 0.5)
     ])
+}
+
+/// The `colors` map as `JSONEncoder` writes it for a dictionary keyed by an
+/// enum: a flat array of alternating raw key and value.
+///
+/// Decoded by hand only to be forgiving about the keys. The synthesized
+/// dictionary decoder rejects the *entire* map on meeting one raw value it does
+/// not recognize, and `Preferences` reads the theme with `try?` — so a single
+/// unknown kind, which is what a theme written by a newer build looks like,
+/// silently discarded every color the user had chosen, in both palettes.
+private struct StoredColors: Decodable {
+    let colors: [MarkdownNodeKind: RGBAColor]
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var decoded: [MarkdownNodeKind: RGBAColor] = [:]
+        while !container.isAtEnd {
+            let rawKind = try container.decode(String.self)
+            // Decoded whether or not the kind is known: the value has to be
+            // consumed either way to stay aligned with the next key.
+            let color = try container.decode(RGBAColor.self)
+            if let kind = MarkdownNodeKind(rawValue: rawKind) {
+                decoded[kind] = color
+            }
+        }
+        colors = decoded
+    }
 }
 
 /// A user-configurable color theme: one palette for light appearance, one for dark.
