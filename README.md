@@ -8,7 +8,7 @@ A lightweight, native macOS Markdown **viewer**. mdview shows Markdown files as 
 - **Configurable colors** — every node type (headings, blockquote, bold, italic, inline code, code blocks, links, list markers) has its own color, with separate palettes for light and dark appearance.
 - **Fenced code blocks** render with a full-width background block and always use a monospaced font, regardless of the body font.
 - **Appearance control** — follow the system, or force Light / Dark, independent of the rest of macOS.
-- **Font picker** — any installed font family and size; defaults to Courier New.
+- **Two fonts, separately configurable** — a body font for everything that is not code (any installed family, any size) and a fixed-width font for inline code and fenced blocks, with its own size. Cmd+ / Cmd- zoom both together.
 - **Optional bold headings** toggle.
 - **Correct ordered-list numbering** — Markdown only reads the first item's number and ignores the rest, so lists are often written entirely as `1.`. mdview shows each item's real position (nested lists count independently), while leaving the delimiter you wrote (`.` or `)`) alone. Toggle it off for a strictly verbatim view.
 - **Read-only and scrollable** — `NSTextView`-backed for efficient rendering of large documents; text is selectable/copyable but not editable.
@@ -88,7 +88,7 @@ This quits mdview if it's running, removes `/Applications/mdview.app`, unregiste
 
 Open **mdview > Settings…** (Cmd+,):
 
-- **Font tab** — font family, size, whether headings render bold, and whether ordered lists are renumbered to their real positions.
+- **Font tab** — body font family and size, code font family (fixed-width families only) and size, whether headings render bold, and whether ordered lists are renumbered to their real positions.
 - **Colors tab** — appearance mode (System / Light / Dark), plus a color well per node type and the code block background, editable separately for the light and dark palettes.
 
 Preferences persist across launches and apply to every open window at once.

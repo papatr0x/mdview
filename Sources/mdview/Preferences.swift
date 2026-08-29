@@ -39,12 +39,23 @@ enum AppearanceMode: String, CaseIterable, Identifiable, Codable {
 final class Preferences {
     static let shared = Preferences()
 
-    var fontFamily: String {
-        didSet { defaults.set(fontFamily, forKey: Keys.fontFamily) }
+    /// Everything that is not code.
+    var bodyFontFamily: String {
+        didSet { defaults.set(bodyFontFamily, forKey: Keys.bodyFontFamily) }
     }
 
-    var fontSize: CGFloat {
-        didSet { defaults.set(Double(fontSize), forKey: Keys.fontSize) }
+    var bodyFontSize: CGFloat {
+        didSet { defaults.set(Double(bodyFontSize), forKey: Keys.bodyFontSize) }
+    }
+
+    /// Inline code and fenced blocks. The settings only offer fixed-width
+    /// families here, which is what keeps code reading as code.
+    var codeFontFamily: String {
+        didSet { defaults.set(codeFontFamily, forKey: Keys.codeFontFamily) }
+    }
+
+    var codeFontSize: CGFloat {
+        didSet { defaults.set(Double(codeFontSize), forKey: Keys.codeFontSize) }
     }
 
     var colorTheme: ColorTheme {
@@ -74,8 +85,12 @@ final class Preferences {
     private static let fontSizeStep: CGFloat = 1
 
     private enum Keys {
-        static let fontFamily = "mdview.fontFamily"
-        static let fontSize = "mdview.fontSize"
+        // The body keys predate the split, and keep their original names so
+        // that the family a user already chose stays their body font.
+        static let bodyFontFamily = "mdview.fontFamily"
+        static let bodyFontSize = "mdview.fontSize"
+        static let codeFontFamily = "mdview.codeFontFamily"
+        static let codeFontSize = "mdview.codeFontSize"
         static let colorTheme = "mdview.colorTheme"
         static let boldHeadings = "mdview.boldHeadings"
         static let renumberOrderedLists = "mdview.renumberOrderedLists"
@@ -88,9 +103,21 @@ final class Preferences {
     ///   would silently overwrite the settings of whoever ran it.
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        fontFamily = defaults.string(forKey: Keys.fontFamily) ?? "Courier New"
-        let storedSize = defaults.double(forKey: Keys.fontSize)
-        fontSize = storedSize > 0 ? CGFloat(storedSize) : 13
+        let storedBodyFamily = defaults.string(forKey: Keys.bodyFontFamily)
+        bodyFontFamily = storedBodyFamily ?? "Courier New"
+        let storedBodySize = defaults.double(forKey: Keys.bodyFontSize)
+        let resolvedBodySize: CGFloat = storedBodySize > 0 ? CGFloat(storedBodySize) : 13
+        bodyFontSize = resolvedBodySize
+
+        // Upgrading from a build that had one font: the family already stored
+        // was necessarily fixed-width (the picker offered nothing else), so it
+        // seeds the code font too rather than surprising anyone with a family
+        // they never chose.
+        codeFontFamily = defaults.string(forKey: Keys.codeFontFamily)
+            ?? storedBodyFamily
+            ?? "Menlo"
+        let storedCodeSize = defaults.double(forKey: Keys.codeFontSize)
+        codeFontSize = storedCodeSize > 0 ? CGFloat(storedCodeSize) : resolvedBodySize
         boldHeadings = defaults.object(forKey: Keys.boldHeadings) as? Bool ?? true
         renumberOrderedLists = defaults.object(forKey: Keys.renumberOrderedLists) as? Bool ?? true
         appearanceMode = defaults.string(forKey: Keys.appearanceMode)
@@ -115,21 +142,26 @@ final class Preferences {
         NSApp?.appearance = appearanceMode.nsAppearance
     }
 
-    /// Cmd+ and Cmd-.
+    /// Cmd+ and Cmd-. Both fonts move together — zooming a document means
+    /// zooming all of it — each clamped to the range on its own.
     func increaseFontSize() {
-        fontSize = min(fontSize + Self.fontSizeStep, Self.fontSizeRange.upperBound)
+        bodyFontSize = min(bodyFontSize + Self.fontSizeStep, Self.fontSizeRange.upperBound)
+        codeFontSize = min(codeFontSize + Self.fontSizeStep, Self.fontSizeRange.upperBound)
     }
 
     func decreaseFontSize() {
-        fontSize = max(fontSize - Self.fontSizeStep, Self.fontSizeRange.lowerBound)
+        bodyFontSize = max(bodyFontSize - Self.fontSizeStep, Self.fontSizeRange.lowerBound)
+        codeFontSize = max(codeFontSize - Self.fontSizeStep, Self.fontSizeRange.lowerBound)
     }
 
     /// Resolves these settings against the appearance currently in effect.
     func style(isDarkAppearance: Bool) -> MarkdownStyle {
         MarkdownStyle(
             theme: colorTheme,
-            bodyFontName: fontFamily,
-            bodyFontSize: fontSize,
+            bodyFontName: bodyFontFamily,
+            bodyFontSize: bodyFontSize,
+            codeFontName: codeFontFamily,
+            codeFontSize: codeFontSize,
             isDarkAppearance: isDarkAppearance,
             boldHeadings: boldHeadings
         )

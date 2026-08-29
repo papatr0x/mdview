@@ -61,8 +61,10 @@ struct ContentView: View {
     private var renderInputs: RenderInputs {
         RenderInputs(
             palette: preferences.colorTheme.palette(forDark: isDarkAppearance),
-            fontFamily: preferences.fontFamily,
-            fontSize: preferences.fontSize,
+            bodyFontFamily: preferences.bodyFontFamily,
+            bodyFontSize: preferences.bodyFontSize,
+            codeFontFamily: preferences.codeFontFamily,
+            codeFontSize: preferences.codeFontSize,
             boldHeadings: preferences.boldHeadings,
             renumberOrderedLists: preferences.renumberOrderedLists
         )
@@ -70,8 +72,10 @@ struct ContentView: View {
 
     private struct RenderInputs: Equatable {
         let palette: ColorPalette
-        let fontFamily: String
-        let fontSize: CGFloat
+        let bodyFontFamily: String
+        let bodyFontSize: CGFloat
+        let codeFontFamily: String
+        let codeFontSize: CGFloat
         let boldHeadings: Bool
         let renumberOrderedLists: Bool
     }

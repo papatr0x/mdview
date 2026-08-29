@@ -9,6 +9,8 @@ final class RobustnessTests: XCTestCase {
             theme: .default,
             bodyFontName: "Helvetica",
             bodyFontSize: 13,
+            codeFontName: "Menlo",
+            codeFontSize: 13,
             isDarkAppearance: false,
             boldHeadings: true
         )

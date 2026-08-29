@@ -8,6 +8,8 @@ final class MarkdownRendererTests: XCTestCase {
             theme: .default,
             bodyFontName: "Helvetica",
             bodyFontSize: 13,
+            codeFontName: "Menlo",
+            codeFontSize: 13,
             isDarkAppearance: dark,
             boldHeadings: boldHeadings
         )
@@ -89,7 +91,8 @@ final class MarkdownRendererTests: XCTestCase {
         let idx = index(of: "code()", in: text)
 
         let font = attributed.attribute(.font, at: idx, effectiveRange: nil) as? NSFont
-        XCTAssertEqual(font?.fontName, NSFont.monospacedSystemFont(ofSize: 13, weight: .regular).fontName)
+        XCTAssertEqual(font?.familyName, "Menlo", "inline code uses the configured code font")
+        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.monoSpace) ?? false)
 
         let color = attributed.attribute(.foregroundColor, at: idx, effectiveRange: nil) as? NSColor
         XCTAssertEqual(color, currentStyle.color(for: .inlineCode))

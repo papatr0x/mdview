@@ -25,8 +25,10 @@ final class PreferencesTests: XCTestCase {
     func testEmptyStoreYieldsTheDocumentedDefaults() {
         let preferences = Preferences(defaults: defaults)
 
-        XCTAssertEqual(preferences.fontFamily, "Courier New")
-        XCTAssertEqual(preferences.fontSize, 13)
+        XCTAssertEqual(preferences.bodyFontFamily, "Courier New")
+        XCTAssertEqual(preferences.bodyFontSize, 13)
+        XCTAssertEqual(preferences.codeFontFamily, "Menlo")
+        XCTAssertEqual(preferences.codeFontSize, 13)
         XCTAssertTrue(preferences.boldHeadings)
         XCTAssertTrue(preferences.renumberOrderedLists)
         XCTAssertEqual(preferences.appearanceMode, .system)
@@ -48,8 +50,10 @@ final class PreferencesTests: XCTestCase {
 
     func testSettingsSurviveAReload() {
         let preferences = Preferences(defaults: defaults)
-        preferences.fontFamily = "Menlo"
-        preferences.fontSize = 21
+        preferences.bodyFontFamily = "Georgia"
+        preferences.bodyFontSize = 21
+        preferences.codeFontFamily = "Menlo"
+        preferences.codeFontSize = 15
         preferences.boldHeadings = false
         preferences.renumberOrderedLists = false
         preferences.appearanceMode = .dark
@@ -57,8 +61,10 @@ final class PreferencesTests: XCTestCase {
 
         let reloaded = Preferences(defaults: defaults)
 
-        XCTAssertEqual(reloaded.fontFamily, "Menlo")
-        XCTAssertEqual(reloaded.fontSize, 21)
+        XCTAssertEqual(reloaded.bodyFontFamily, "Georgia")
+        XCTAssertEqual(reloaded.bodyFontSize, 21)
+        XCTAssertEqual(reloaded.codeFontFamily, "Menlo")
+        XCTAssertEqual(reloaded.codeFontSize, 15)
         XCTAssertFalse(reloaded.boldHeadings)
         XCTAssertFalse(reloaded.renumberOrderedLists)
         XCTAssertEqual(reloaded.appearanceMode, .dark)
@@ -86,8 +92,10 @@ final class PreferencesTests: XCTestCase {
     /// `double(forKey:)`, and a zero-point font would render nothing.
     func testZeroFontSizeFallsBackInsteadOfRenderingNothing() {
         defaults.set(0.0, forKey: "mdview.fontSize")
+        defaults.set(0.0, forKey: "mdview.codeFontSize")
 
-        XCTAssertEqual(Preferences(defaults: defaults).fontSize, 13)
+        XCTAssertEqual(Preferences(defaults: defaults).bodyFontSize, 13)
+        XCTAssertEqual(Preferences(defaults: defaults).codeFontSize, 13)
     }
 
     // MARK: - Font size commands
@@ -95,12 +103,82 @@ final class PreferencesTests: XCTestCase {
     func testFontSizeStepsStayWithinRange() {
         let preferences = Preferences(defaults: defaults)
 
-        preferences.fontSize = Preferences.fontSizeRange.upperBound
+        preferences.bodyFontSize = Preferences.fontSizeRange.upperBound
+        preferences.codeFontSize = Preferences.fontSizeRange.upperBound
         preferences.increaseFontSize()
-        XCTAssertEqual(preferences.fontSize, Preferences.fontSizeRange.upperBound)
+        XCTAssertEqual(preferences.bodyFontSize, Preferences.fontSizeRange.upperBound)
+        XCTAssertEqual(preferences.codeFontSize, Preferences.fontSizeRange.upperBound)
 
-        preferences.fontSize = Preferences.fontSizeRange.lowerBound
+        preferences.bodyFontSize = Preferences.fontSizeRange.lowerBound
+        preferences.codeFontSize = Preferences.fontSizeRange.lowerBound
         preferences.decreaseFontSize()
-        XCTAssertEqual(preferences.fontSize, Preferences.fontSizeRange.lowerBound)
+        XCTAssertEqual(preferences.bodyFontSize, Preferences.fontSizeRange.lowerBound)
+        XCTAssertEqual(preferences.codeFontSize, Preferences.fontSizeRange.lowerBound)
+    }
+
+    /// Zooming a document zooms all of it, both fonts at once.
+    func testZoomMovesBothSizes() {
+        let preferences = Preferences(defaults: defaults)
+        preferences.bodyFontSize = 13
+        preferences.codeFontSize = 16
+
+        preferences.increaseFontSize()
+        XCTAssertEqual(preferences.bodyFontSize, 14)
+        XCTAssertEqual(preferences.codeFontSize, 17)
+
+        preferences.decreaseFontSize()
+        preferences.decreaseFontSize()
+        XCTAssertEqual(preferences.bodyFontSize, 12)
+        XCTAssertEqual(preferences.codeFontSize, 15)
+    }
+
+    // MARK: - Wiring into the renderer
+
+    /// The settings reach the style object as two separate fonts. Cheap to
+    /// assert and easy to get wrong: a rendered document is the only other
+    /// place this shows up.
+    func testStyleCarriesBothFontsSeparately() {
+        let preferences = Preferences(defaults: defaults)
+        preferences.bodyFontFamily = "Georgia"
+        preferences.bodyFontSize = 18
+        preferences.codeFontFamily = "Menlo"
+        preferences.codeFontSize = 12
+
+        let style = preferences.style(isDarkAppearance: false)
+
+        XCTAssertEqual(style.bodyFontName, "Georgia")
+        XCTAssertEqual(style.bodyFontSize, 18)
+        XCTAssertEqual(style.codeFontName, "Menlo")
+        XCTAssertEqual(style.codeFontSize, 12)
+        XCTAssertEqual(style.font(for: .body).familyName, "Georgia")
+        XCTAssertEqual(style.font(for: .codeBlock).familyName, "Menlo")
+        XCTAssertEqual(style.font(for: .inlineCode).pointSize, 12)
+    }
+
+    // MARK: - Upgrading from a single font
+
+    /// A store written by a build that had one font setting. That family was
+    /// necessarily fixed-width — the picker offered nothing else — so it seeds
+    /// the code font rather than leaving the user with a family they never
+    /// chose, and it stays the body font because the key never changed.
+    func testStoreFromTheSingleFontBuildSeedsBothFonts() {
+        defaults.set("Courier", forKey: "mdview.fontFamily")
+        defaults.set(17.0, forKey: "mdview.fontSize")
+
+        let preferences = Preferences(defaults: defaults)
+
+        XCTAssertEqual(preferences.bodyFontFamily, "Courier")
+        XCTAssertEqual(preferences.bodyFontSize, 17)
+        XCTAssertEqual(preferences.codeFontFamily, "Courier")
+        XCTAssertEqual(preferences.codeFontSize, 17)
+    }
+
+    /// Once the code font has been chosen explicitly it stops following the
+    /// body one.
+    func testExplicitCodeFontWinsOverTheBodyFamily() {
+        defaults.set("Courier", forKey: "mdview.fontFamily")
+        defaults.set("Menlo", forKey: "mdview.codeFontFamily")
+
+        XCTAssertEqual(Preferences(defaults: defaults).codeFontFamily, "Menlo")
     }
 }

@@ -11,6 +11,8 @@ final class StylePlanCacheTests: XCTestCase {
             theme: .default,
             bodyFontName: "Helvetica",
             bodyFontSize: size,
+            codeFontName: "Menlo",
+            codeFontSize: size,
             isDarkAppearance: dark,
             boldHeadings: true
         )

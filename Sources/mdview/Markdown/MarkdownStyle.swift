@@ -1,17 +1,21 @@
 import AppKit
 
-/// Resolves a `ColorTheme` + font preference into concrete `NSFont`/`NSColor`
+/// Resolves a `ColorTheme` + font preferences into concrete `NSFont`/`NSColor`
 /// values for each markdown node kind, for the *currently active* appearance.
 ///
-/// This is a syntax-highlighting style, not a rendering style: every node kind
-/// shares the same user-selected font family/size (except code, which is
-/// always monospaced) — only color and, for a few node kinds, weight/slant
-/// differ, so the document reads like colorized markdown source rather than
-/// a re-flowed preview.
+/// This is a syntax-highlighting style, not a rendering style: nothing is
+/// re-flowed, only colored, and — for a few node kinds — given weight or slant.
+///
+/// Two fonts, both the user's: everything that is not code uses the body font,
+/// and inline code and fenced blocks use the code font, which the settings
+/// restrict to a fixed-width family. They carry independent sizes because the
+/// same point size rarely looks the same across two families.
 struct MarkdownStyle {
     var theme: ColorTheme
     var bodyFontName: String
     var bodyFontSize: CGFloat
+    var codeFontName: String
+    var codeFontSize: CGFloat
     var isDarkAppearance: Bool
     var boldHeadings: Bool
 
@@ -21,8 +25,12 @@ struct MarkdownStyle {
         NSFont(name: bodyFontName, size: bodyFontSize) ?? NSFont.systemFont(ofSize: bodyFontSize)
     }
 
-    private var monoFont: NSFont {
-        NSFont.monospacedSystemFont(ofSize: bodyFontSize, weight: .regular)
+    /// Falls back to the system monospaced font, which is what code always used
+    /// before the family became configurable — so an unavailable or uninstalled
+    /// choice still renders code as code.
+    private var codeFont: NSFont {
+        NSFont(name: codeFontName, size: codeFontSize)
+            ?? NSFont.monospacedSystemFont(ofSize: codeFontSize, weight: .regular)
     }
 
     func color(for kind: MarkdownNodeKind) -> NSColor {
@@ -38,14 +46,14 @@ struct MarkdownStyle {
         palette.codeBlockBackground.nsColor
     }
 
-    /// The font to use for a node kind: always the user-selected font, except
-    /// code (always monospaced) and headings (bold weight of the same font).
+    /// The font for a node kind: the code font for code, the body font for
+    /// everything else, and headings in the bold weight of the body font.
     func font(for kind: MarkdownNodeKind) -> NSFont {
         switch kind {
         case .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
             return withTraits(baseFont, bold: boldHeadings, italic: false)
         case .inlineCode, .codeBlock:
-            return monoFont
+            return codeFont
         default:
             return baseFont
         }
