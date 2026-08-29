@@ -6,22 +6,15 @@ import SwiftUI
 struct FontPickerView: View {
     @Bindable var preferences = Preferences.shared
 
-    /// Built once per launch rather than per `body` evaluation: each entry
-    /// instantiates an `NSFont` to inspect it, and the installed families do
-    /// not change while the app is running.
-    private static let allFamilies: [String] =
-        NSFontManager.shared.availableFontFamilies.sorted()
-
-    /// Code is restricted to fixed-width families — that is what makes code
-    /// read as code, and what keeps a fenced block's columns lining up.
-    /// The body font carries no such restriction: prose does not need it.
-    private static let fixedPitchFamilies: [String] =
-        NSFontManager.shared.availableFontFamilies.filter { family in
-            guard let members = NSFontManager.shared.availableMembers(ofFontFamily: family),
-                  let fontName = members.first?[0] as? String,
-                  let font = NSFont(name: fontName, size: 12) else { return false }
-            return font.isFixedPitch
-        }.sorted()
+    /// Whatever is configured is always offered, even if it is not a
+    /// fixed-width family — a Picker with no matching tag renders blank, which
+    /// hides the real setting instead of showing it.
+    private var codeFamilies: [String] {
+        let families = FontCatalog.fixedPitchFamilies
+        return families.contains(preferences.codeFontFamily)
+            ? families
+            : (families + [preferences.codeFontFamily]).sorted()
+    }
 
     var body: some View {
         // A plain Form with explicit labels rather than grouped sections: the
@@ -29,7 +22,7 @@ struct FontPickerView: View {
         // font rows in a grouped form do not reliably fit inside it.
         Form {
             Picker("Body font", selection: $preferences.bodyFontFamily) {
-                ForEach(Self.allFamilies, id: \.self) { family in
+                ForEach(FontCatalog.allFamilies, id: \.self) { family in
                     Text(family).tag(family)
                 }
             }
@@ -38,7 +31,7 @@ struct FontPickerView: View {
             }
 
             Picker("Code font", selection: $preferences.codeFontFamily) {
-                ForEach(Self.fixedPitchFamilies, id: \.self) { family in
+                ForEach(codeFamilies, id: \.self) { family in
                     Text(family).tag(family)
                 }
             }

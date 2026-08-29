@@ -132,6 +132,37 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.codeFontSize, 15)
     }
 
+    /// Regression: the body font is unrestricted, so the family stored under
+    /// the old single-font key is not necessarily fixed-width. Seeding the code
+    /// font from a proportional family rendered code in it — code stopped
+    /// looking like code.
+    func testAProportionalBodyFamilyDoesNotSeedTheCodeFont() {
+        defaults.set("Helvetica Neue", forKey: "mdview.fontFamily")
+
+        let preferences = Preferences(defaults: defaults)
+
+        XCTAssertEqual(preferences.bodyFontFamily, "Helvetica Neue")
+        XCTAssertEqual(preferences.codeFontFamily, "Menlo")
+    }
+
+    /// Regression: the seed used to be recomputed at every launch and never
+    /// written, so the code font trailed the body font forever instead of being
+    /// a setting of its own.
+    func testTheSeededCodeFontIsPinnedAndStopsFollowingTheBodyFont() {
+        defaults.set("Courier New", forKey: "mdview.fontFamily")
+
+        let first = Preferences(defaults: defaults)
+        XCTAssertEqual(first.codeFontFamily, "Courier New")
+        XCTAssertNotNil(
+            defaults.object(forKey: "mdview.codeFontFamily"),
+            "the seed must be written, not re-derived on the next launch"
+        )
+
+        first.bodyFontFamily = "Georgia"
+
+        XCTAssertEqual(Preferences(defaults: defaults).codeFontFamily, "Courier New")
+    }
+
     // MARK: - Wiring into the renderer
 
     /// The settings reach the style object as two separate fonts. Cheap to
@@ -153,6 +184,7 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(style.font(for: .body).familyName, "Georgia")
         XCTAssertEqual(style.font(for: .codeBlock).familyName, "Menlo")
         XCTAssertEqual(style.font(for: .inlineCode).pointSize, 12)
+
     }
 
     // MARK: - Upgrading from a single font
@@ -162,21 +194,21 @@ final class PreferencesTests: XCTestCase {
     /// the code font rather than leaving the user with a family they never
     /// chose, and it stays the body font because the key never changed.
     func testStoreFromTheSingleFontBuildSeedsBothFonts() {
-        defaults.set("Courier", forKey: "mdview.fontFamily")
+        defaults.set("Courier New", forKey: "mdview.fontFamily")
         defaults.set(17.0, forKey: "mdview.fontSize")
 
         let preferences = Preferences(defaults: defaults)
 
-        XCTAssertEqual(preferences.bodyFontFamily, "Courier")
+        XCTAssertEqual(preferences.bodyFontFamily, "Courier New")
         XCTAssertEqual(preferences.bodyFontSize, 17)
-        XCTAssertEqual(preferences.codeFontFamily, "Courier")
+        XCTAssertEqual(preferences.codeFontFamily, "Courier New")
         XCTAssertEqual(preferences.codeFontSize, 17)
     }
 
     /// Once the code font has been chosen explicitly it stops following the
     /// body one.
     func testExplicitCodeFontWinsOverTheBodyFamily() {
-        defaults.set("Courier", forKey: "mdview.fontFamily")
+        defaults.set("Georgia", forKey: "mdview.fontFamily")
         defaults.set("Menlo", forKey: "mdview.codeFontFamily")
 
         XCTAssertEqual(Preferences(defaults: defaults).codeFontFamily, "Menlo")

@@ -109,13 +109,16 @@ final class Preferences {
         let resolvedBodySize: CGFloat = storedBodySize > 0 ? CGFloat(storedBodySize) : 13
         bodyFontSize = resolvedBodySize
 
-        // Upgrading from a build that had one font: the family already stored
-        // was necessarily fixed-width (the picker offered nothing else), so it
-        // seeds the code font too rather than surprising anyone with a family
-        // they never chose.
-        codeFontFamily = defaults.string(forKey: Keys.codeFontFamily)
-            ?? storedBodyFamily
-            ?? "Menlo"
+        // Upgrading from a build that had one font: that family seeds the code
+        // font too, rather than surprising anyone with one they never chose —
+        // but only if it is actually fixed-width. It is not necessarily: the
+        // old picker offered nothing else, yet the body font is unrestricted
+        // now, so by the time this runs the stored family may well be
+        // proportional.
+        let storedCodeFamily = defaults.string(forKey: Keys.codeFontFamily)
+        codeFontFamily = storedCodeFamily
+            ?? storedBodyFamily.flatMap { FontCatalog.isFixedPitch($0) ? $0 : nil }
+            ?? FontCatalog.defaultCodeFamily
         let storedCodeSize = defaults.double(forKey: Keys.codeFontSize)
         codeFontSize = storedCodeSize > 0 ? CGFloat(storedCodeSize) : resolvedBodySize
         boldHeadings = defaults.object(forKey: Keys.boldHeadings) as? Bool ?? true
@@ -128,6 +131,14 @@ final class Preferences {
             colorTheme = decoded
         } else {
             colorTheme = .default
+        }
+
+        // Written once, on the launch that first needs it. Every other default
+        // is a constant and can be re-derived at each launch, but this one is
+        // derived from another setting: leaving it unwritten made the code font
+        // silently follow the body font every time the body font changed.
+        if storedCodeFamily == nil {
+            defaults.set(codeFontFamily, forKey: Keys.codeFontFamily)
         }
     }
 
