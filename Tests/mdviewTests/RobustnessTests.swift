@@ -12,7 +12,8 @@ final class RobustnessTests: XCTestCase {
             codeFontName: "Menlo",
             codeFontSize: 13,
             isDarkAppearance: false,
-            boldHeadings: true
+            boldHeadings: true,
+            listItemSpacing: 4
         )
     }
 

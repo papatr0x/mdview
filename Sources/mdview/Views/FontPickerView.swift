@@ -39,6 +39,14 @@ struct FontPickerView: View {
                 Text("Code size: \(Int(preferences.codeFontSize)) pt")
             }
 
+            Stepper(
+                value: $preferences.listItemSpacing,
+                in: Preferences.listItemSpacingRange,
+                step: 1
+            ) {
+                Text("Space before list items: \(Int(preferences.listItemSpacing)) pt")
+            }
+
             Toggle("Bold headings", isOn: $preferences.boldHeadings)
             Toggle("Renumber ordered lists", isOn: $preferences.renumberOrderedLists)
         }

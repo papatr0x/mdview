@@ -29,6 +29,7 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.bodyFontSize, 13)
         XCTAssertEqual(preferences.codeFontFamily, "Menlo")
         XCTAssertEqual(preferences.codeFontSize, 13)
+        XCTAssertEqual(preferences.listItemSpacing, 4)
         XCTAssertTrue(preferences.boldHeadings)
         XCTAssertTrue(preferences.renumberOrderedLists)
         XCTAssertEqual(preferences.appearanceMode, .system)
@@ -54,6 +55,7 @@ final class PreferencesTests: XCTestCase {
         preferences.bodyFontSize = 21
         preferences.codeFontFamily = "Menlo"
         preferences.codeFontSize = 15
+        preferences.listItemSpacing = 9
         preferences.boldHeadings = false
         preferences.renumberOrderedLists = false
         preferences.appearanceMode = .dark
@@ -65,6 +67,7 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(reloaded.bodyFontSize, 21)
         XCTAssertEqual(reloaded.codeFontFamily, "Menlo")
         XCTAssertEqual(reloaded.codeFontSize, 15)
+        XCTAssertEqual(reloaded.listItemSpacing, 9)
         XCTAssertFalse(reloaded.boldHeadings)
         XCTAssertFalse(reloaded.renumberOrderedLists)
         XCTAssertEqual(reloaded.appearanceMode, .dark)
@@ -132,6 +135,15 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(preferences.codeFontSize, 15)
     }
 
+    /// Zero is a real setting here — "no spacing" — not a missing value, so it
+    /// must survive a reload instead of falling back to the default.
+    func testZeroListSpacingIsStoredRatherThanTreatedAsAbsent() {
+        let preferences = Preferences(defaults: defaults)
+        preferences.listItemSpacing = 0
+
+        XCTAssertEqual(Preferences(defaults: defaults).listItemSpacing, 0)
+    }
+
     /// Regression: the body font is unrestricted, so the family stored under
     /// the old single-font key is not necessarily fixed-width. Seeding the code
     /// font from a proportional family rendered code in it — code stopped
@@ -185,6 +197,8 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(style.font(for: .codeBlock).familyName, "Menlo")
         XCTAssertEqual(style.font(for: .inlineCode).pointSize, 12)
 
+        preferences.listItemSpacing = 7
+        XCTAssertEqual(preferences.style(isDarkAppearance: false).listItemSpacing, 7)
     }
 
     // MARK: - Upgrading from a single font

@@ -18,7 +18,8 @@ final class FontSelectionTests: XCTestCase {
             codeFontName: code,
             codeFontSize: codeSize,
             isDarkAppearance: false,
-            boldHeadings: true
+            boldHeadings: true,
+            listItemSpacing: 4
         )
     }
 

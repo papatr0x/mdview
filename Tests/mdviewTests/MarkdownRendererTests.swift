@@ -11,7 +11,8 @@ final class MarkdownRendererTests: XCTestCase {
             codeFontName: "Menlo",
             codeFontSize: 13,
             isDarkAppearance: dark,
-            boldHeadings: boldHeadings
+            boldHeadings: boldHeadings,
+            listItemSpacing: 4
         )
     }
 

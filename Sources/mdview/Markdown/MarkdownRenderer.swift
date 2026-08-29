@@ -60,8 +60,14 @@ enum MarkdownRenderer {
                 .foregroundColor: style.color(for: .body)
             ]
         )
+        let listItemParagraphStyle = style.listItemParagraphStyle()
         for operation in plan.operations {
-            Self.apply(operation, to: attributed, style: style)
+            Self.apply(
+                operation,
+                to: attributed,
+                style: style,
+                listItemParagraphStyle: listItemParagraphStyle
+            )
         }
         if renumberOrderedLists {
             Self.apply(plan.renumberings, to: attributed)
@@ -92,7 +98,8 @@ enum MarkdownRenderer {
     private static func apply(
         _ operation: StyleOperation,
         to attributed: NSMutableAttributedString,
-        style: MarkdownStyle
+        style: MarkdownStyle,
+        listItemParagraphStyle: NSParagraphStyle?
     ) {
         switch operation {
         case let .style(kind, range, changeFont):
@@ -119,6 +126,12 @@ enum MarkdownRenderer {
                     range: subRange
                 )
             }
+
+        case let .listItemSpacing(range):
+            // Nil when the setting is zero: nothing is written, so turning the
+            // spacing off restores exactly the previous attributed string.
+            guard let listItemParagraphStyle else { break }
+            attributed.addAttribute(.paragraphStyle, value: listItemParagraphStyle, range: range)
 
         case let .monospacedPreservingTraits(kind, range):
             // Enclosing strong/emphasis nodes are painted first, so the range
@@ -179,6 +192,9 @@ private enum StyleOperation {
     case underline(NSRange)
     case trait(bold: Bool, italic: Bool, range: NSRange)
     case monospacedPreservingTraits(kind: MarkdownNodeKind, range: NSRange)
+    /// Carries no amount: how much space a list item gets is a setting, so it
+    /// is resolved when painting, not when planning.
+    case listItemSpacing(NSRange)
 }
 
 /// A pending rewrite of one ordered-list numeral: the range of the digits as
@@ -267,10 +283,23 @@ private struct SourcePlanner: MarkupVisitor {
     }
 
     mutating func visitListItem(_ listItem: ListItem) {
-        if let full = nsRange(for: listItem), let markerRange = markerRange(within: full) {
-            operations.append(.style(kind: .listMarker, range: markerRange, changeFont: false))
+        if let full = nsRange(for: listItem) {
+            if let markerRange = markerRange(within: full) {
+                operations.append(.style(kind: .listMarker, range: markerRange, changeFont: false))
+            }
+            // Only the line the item starts on. The item's own range covers all
+            // of its content — further paragraphs, nested lists — and a
+            // paragraph style set across that would space out every paragraph
+            // inside it, not the item itself.
+            operations.append(.listItemSpacing(firstLineParagraphRange(of: full)))
         }
         for child in listItem.children { visit(child) }
+    }
+
+    /// The paragraph containing the start of `itemRange`. Items always begin a
+    /// line, so the ranges of two items — nested ones included — never overlap.
+    private func firstLineParagraphRange(of itemRange: NSRange) -> NSRange {
+        nsText.paragraphRange(for: NSRange(location: itemRange.location, length: 0))
     }
 
     /// Each `OrderedList` node carries its own counter, so a nested list

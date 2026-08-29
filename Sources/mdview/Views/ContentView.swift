@@ -66,7 +66,8 @@ struct ContentView: View {
             codeFontFamily: preferences.codeFontFamily,
             codeFontSize: preferences.codeFontSize,
             boldHeadings: preferences.boldHeadings,
-            renumberOrderedLists: preferences.renumberOrderedLists
+            renumberOrderedLists: preferences.renumberOrderedLists,
+            listItemSpacing: preferences.listItemSpacing
         )
     }
 
@@ -78,6 +79,7 @@ struct ContentView: View {
         let codeFontSize: CGFloat
         let boldHeadings: Bool
         let renumberOrderedLists: Bool
+        let listItemSpacing: CGFloat
     }
 
     /// The appearance in effect right now, so the very first render already

@@ -18,6 +18,9 @@ struct MarkdownStyle {
     var codeFontSize: CGFloat
     var isDarkAppearance: Bool
     var boldHeadings: Bool
+    /// Points of vertical space before each list item. Zero means none, and
+    /// then no paragraph style is applied at all.
+    var listItemSpacing: CGFloat
 
     private var palette: ColorPalette { theme.palette(forDark: isDarkAppearance) }
 
@@ -31,6 +34,19 @@ struct MarkdownStyle {
     private var codeFont: NSFont {
         NSFont(name: codeFontName, size: codeFontSize)
             ?? NSFont.monospacedSystemFont(ofSize: codeFontSize, weight: .regular)
+    }
+
+    /// The paragraph style that puts space above a list item, or nil when the
+    /// setting is zero — so switching the feature off leaves the rendered
+    /// document byte for byte and attribute for attribute as it was.
+    ///
+    /// Built by the caller once per render and reused for every item: one
+    /// allocation per list item would be wasteful on a long document.
+    func listItemParagraphStyle() -> NSParagraphStyle? {
+        guard listItemSpacing > 0 else { return nil }
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.paragraphSpacingBefore = listItemSpacing
+        return paragraphStyle.copy() as? NSParagraphStyle
     }
 
     func color(for kind: MarkdownNodeKind) -> NSColor {

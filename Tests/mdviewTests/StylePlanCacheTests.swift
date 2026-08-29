@@ -14,7 +14,8 @@ final class StylePlanCacheTests: XCTestCase {
             codeFontName: "Menlo",
             codeFontSize: size,
             isDarkAppearance: dark,
-            boldHeadings: true
+            boldHeadings: true,
+            listItemSpacing: 6
         )
     }
 

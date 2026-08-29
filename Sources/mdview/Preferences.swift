@@ -72,6 +72,12 @@ final class Preferences {
         didSet { defaults.set(renumberOrderedLists, forKey: Keys.renumberOrderedLists) }
     }
 
+    /// Points of vertical space before each list item, ordered or not. Zero
+    /// switches it off.
+    var listItemSpacing: CGFloat {
+        didSet { defaults.set(Double(listItemSpacing), forKey: Keys.listItemSpacing) }
+    }
+
     var appearanceMode: AppearanceMode {
         didSet {
             defaults.set(appearanceMode.rawValue, forKey: Keys.appearanceMode)
@@ -82,6 +88,7 @@ final class Preferences {
     private let defaults: UserDefaults
 
     static let fontSizeRange: ClosedRange<CGFloat> = 9...36
+    static let listItemSpacingRange: ClosedRange<CGFloat> = 0...20
     private static let fontSizeStep: CGFloat = 1
 
     private enum Keys {
@@ -94,6 +101,7 @@ final class Preferences {
         static let colorTheme = "mdview.colorTheme"
         static let boldHeadings = "mdview.boldHeadings"
         static let renumberOrderedLists = "mdview.renumberOrderedLists"
+        static let listItemSpacing = "mdview.listItemSpacing"
         static let appearanceMode = "mdview.appearanceMode"
     }
 
@@ -121,6 +129,11 @@ final class Preferences {
             ?? FontCatalog.defaultCodeFamily
         let storedCodeSize = defaults.double(forKey: Keys.codeFontSize)
         codeFontSize = storedCodeSize > 0 ? CGFloat(storedCodeSize) : resolvedBodySize
+        // Zero is a meaningful value here — it means "no spacing" — so absence
+        // has to be told apart from it, which `double(forKey:)` alone cannot do.
+        listItemSpacing = defaults.object(forKey: Keys.listItemSpacing) == nil
+            ? 4
+            : CGFloat(defaults.double(forKey: Keys.listItemSpacing))
         boldHeadings = defaults.object(forKey: Keys.boldHeadings) as? Bool ?? true
         renumberOrderedLists = defaults.object(forKey: Keys.renumberOrderedLists) as? Bool ?? true
         appearanceMode = defaults.string(forKey: Keys.appearanceMode)
@@ -174,7 +187,8 @@ final class Preferences {
             codeFontName: codeFontFamily,
             codeFontSize: codeFontSize,
             isDarkAppearance: isDarkAppearance,
-            boldHeadings: boldHeadings
+            boldHeadings: boldHeadings,
+            listItemSpacing: listItemSpacing
         )
     }
 
