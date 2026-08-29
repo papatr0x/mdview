@@ -33,6 +33,16 @@ enum TextDecoder {
            let text = String(data: data, encoding: encoding) {
             return strippingByteOrderMark(text)
         }
+        // Sniffed before UTF-8 is attempted, not after it fails: ASCII text in
+        // UTF-16 is *valid* UTF-8. Every byte of it — the interleaved NULs
+        // included — is under 0x80, so UTF-8 accepts the file and hands back
+        // the text with a NUL between every character, and the sniffer below
+        // never runs. Non-ASCII text hid this: its high bytes are invalid
+        // UTF-8, so those files did reach the sniffer and decoded correctly.
+        if let utf16 = utf16EncodingWithoutByteOrderMark(for: data),
+           let text = String(data: data, encoding: utf16) {
+            return strippingByteOrderMark(text)
+        }
         // Almost all markdown is UTF-8; this also covers plain ASCII.
         if let utf8 = String(data: data, encoding: .utf8) {
             return strippingByteOrderMark(utf8)
@@ -60,28 +70,44 @@ enum TextDecoder {
         text.hasPrefix("\u{FEFF}") ? String(text.dropFirst()) : text
     }
 
-    /// UTF-16 without a byte-order mark is not self-describing, and Latin-1
-    /// happily "decodes" it into text riddled with NUL characters, so sniff
-    /// for it explicitly before falling back to a single-byte encoding.
-    static func candidateEncodings(for data: Data) -> [String.Encoding] {
-        var candidates: [String.Encoding] = []
+    /// UTF-16 without a byte-order mark is not self-describing, so sniff for
+    /// it by the NUL bytes that ASCII-range characters leave behind: in
+    /// UTF-16BE the NUL comes first ("\0#"), in UTF-16LE second ("#\0").
+    ///
+    /// Deliberately demanding, because this answer preempts UTF-8: a UTF-8
+    /// document with a stray NUL in it must not be mistaken for UTF-16. Real
+    /// UTF-16 prose is about half NUL bytes, so requiring a quarter of the
+    /// sample is far more than an accident could produce and far less than the
+    /// genuine article carries.
+    static func utf16EncodingWithoutByteOrderMark(for data: Data) -> String.Encoding? {
+        guard data.count >= 2, data.count.isMultiple(of: 2) else { return nil }
 
-        if data.count >= 2, data.count.isMultiple(of: 2) {
-            var nulsAtEvenOffsets = 0
-            var nulsAtOddOffsets = 0
-            for (offset, byte) in data.prefix(512).enumerated() where byte == 0 {
-                if offset.isMultiple(of: 2) { nulsAtEvenOffsets += 1 } else { nulsAtOddOffsets += 1 }
-            }
-            // ASCII-range text in UTF-16BE puts its NUL byte first ("\0#"),
-            // and in UTF-16LE second ("#\0").
-            if nulsAtEvenOffsets > nulsAtOddOffsets {
-                candidates.append(.utf16BigEndian)
-            } else if nulsAtOddOffsets > 0 {
-                candidates.append(.utf16LittleEndian)
-            }
+        let sample = data.prefix(512)
+        var nulsAtEvenOffsets = 0
+        var nulsAtOddOffsets = 0
+        for (offset, byte) in sample.enumerated() where byte == 0 {
+            if offset.isMultiple(of: 2) { nulsAtEvenOffsets += 1 } else { nulsAtOddOffsets += 1 }
         }
 
-        candidates.append(.isoLatin1) // last resort: decodes any byte sequence
+        let threshold = sample.count / 4
+        if nulsAtEvenOffsets > nulsAtOddOffsets, nulsAtEvenOffsets >= threshold {
+            return .utf16BigEndian
+        }
+        if nulsAtOddOffsets > nulsAtEvenOffsets, nulsAtOddOffsets >= threshold {
+            return .utf16LittleEndian
+        }
+        return nil
+    }
+
+    /// The last resort, reached only once a byte-order mark, the UTF-16 sniff,
+    /// and UTF-8 have all failed to produce text. Latin-1 decodes any byte
+    /// sequence at all, so it ends the chain rather than throwing.
+    static func candidateEncodings(for data: Data) -> [String.Encoding] {
+        var candidates: [String.Encoding] = []
+        if let utf16 = utf16EncodingWithoutByteOrderMark(for: data) {
+            candidates.append(utf16)
+        }
+        candidates.append(.isoLatin1)
         return candidates
     }
 }

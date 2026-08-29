@@ -175,6 +175,39 @@ final class RobustnessTests: XCTestCase {
         XCTAssertEqual(TextDecoder.strippingByteOrderMark("\u{FEFF}\u{FEFF}x"), "\u{FEFF}x")
     }
 
+    /// The encoding round-trip above uses accented text, and that is what hid
+    /// this: the high bytes of "Título" make UTF-16 bytes invalid as UTF-8, so
+    /// those files reached the sniffer. A plain-ASCII document in UTF-16 is
+    /// *valid* UTF-8 — every byte under 0x80, interleaved NULs included — so
+    /// UTF-8 accepted it and returned one NUL between every character.
+    func testAsciiOnlyUTF16WithoutByteOrderMarkDecodes() throws {
+        let expected = "# Heading\n\n- item\n\n```\ncode\n```\n"
+
+        for (name, encoding) in [("LE", String.Encoding.utf16LittleEndian),
+                                 ("BE", String.Encoding.utf16BigEndian)] {
+            let data = try XCTUnwrap(expected.data(using: encoding))
+            XCTAssertNotNil(String(data: data, encoding: .utf8),
+                            "\(name) fixture must be valid UTF-8 — that is the trap being tested")
+
+            let decoded = try TextDecoder.decode(data)
+            XCTAssertEqual(decoded, expected, "utf16\(name)-no-BOM ASCII decoded incorrectly")
+            XCTAssertFalse(decoded.unicodeScalars.contains { $0.value == 0 },
+                           "utf16\(name)-no-BOM ASCII decoded with stray NUL characters")
+        }
+    }
+
+    /// The sniff runs before UTF-8 now, so it has to stay off UTF-8's territory:
+    /// an ordinary document, and one carrying a stray NUL, must both still be
+    /// read as UTF-8 rather than reinterpreted as UTF-16.
+    func testUTF8IsNotMistakenForUTF16() throws {
+        let plain = try XCTUnwrap("# Heading\n\nBody.\n".data(using: .utf8))
+        XCTAssertNil(TextDecoder.utf16EncodingWithoutByteOrderMark(for: plain))
+
+        let withStrayNul = try XCTUnwrap("# Heading\n\nBody\u{0}text here, mostly ASCII.\n".data(using: .utf8))
+        XCTAssertNil(TextDecoder.utf16EncodingWithoutByteOrderMark(for: withStrayNul))
+        XCTAssertTrue(try TextDecoder.decode(withStrayNul).contains("mostly ASCII"))
+    }
+
     func testASCIIDecodesVerbatim() throws {
         let original = "# Plain Heading\n\n- item\n\n```\ncode\n```\n"
         let data = try XCTUnwrap(original.data(using: .ascii))
