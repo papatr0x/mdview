@@ -5,12 +5,14 @@ A lightweight, native macOS Markdown **viewer**. mdview shows Markdown files as 
 ## Features
 
 - **Syntax highlighting, not rendering** — the raw Markdown text (`#`, `>`, `**`, backticks, …) stays visible, colorized by node type, like a source-code editor rather than a browser preview.
-- **Configurable colors** — every node type (headings, blockquote, bold, italic, inline code, code blocks, links, list markers) has its own color, with separate palettes for light and dark appearance.
+- **Configurable colors** — every node type that has one (blockquote, bold, italic, inline code, code blocks, links, list markers, body text) with separate palettes for light and dark appearance. Headings are not in the list: they are told apart by size, not colour.
 - **Fenced code blocks** render with a full-width background block and always use a monospaced font, regardless of the body font.
 - **Appearance control** — follow the system, or force Light / Dark, independent of the rest of macOS.
 - **Two fonts, separately configurable** — a body font for everything that is not code (any installed family, any size) and a fixed-width font for inline code and fenced blocks, with its own size. Cmd+ / Cmd- zoom both together.
+- **Headings sized by level** — H1 through H6 scale down from the body size, strictly decreasing, with no level landing on the body size. They carry no color of their own: size is what tells them apart.
+- **Blockquotes with shape** — indented one step per level of nesting, with a rule down the left edge of each level.
 - **Optional bold headings** toggle.
-- **Hidden inline markers** — the `**`, `*` and `_` around bold and italic text are not drawn, nor the backticks around inline code, so the markup reads as what it marks instead of competing with its own markers. The characters are still there: they are skipped when glyphs are generated, so selecting a phrase and copying it gives back exactly what the file says. Toggle it off to see them again.
+- **Hidden markers** — the `**`, `*` and `_` around emphasis are not drawn, nor the backticks around inline code, the `#` opening a heading or the `>` opening each line of a quote, so the markup reads as what it marks instead of competing with its own markers. The characters are still there: they are skipped when glyphs are generated, so selecting a phrase and copying it gives back exactly what the file says. Toggle it off to see them again.
 - **Breathing room in lists** — a configurable amount of vertical space before every list item, ordered or not. Set it to 0 to switch it off. It is drawn as paragraph spacing, so the text itself is untouched.
 - **Correct ordered-list numbering** — Markdown only reads the first item's number and ignores the rest, so lists are often written entirely as `1.`. mdview shows each item's real position (nested lists count independently), while leaving the delimiter you wrote (`.` or `)`) alone. Toggle it off for a strictly verbatim view.
 - **Read-only and scrollable** — `NSTextView`-backed for efficient rendering of large documents; text is selectable/copyable but not editable.
@@ -90,7 +92,7 @@ This quits mdview if it's running, removes `/Applications/mdview.app`, unregiste
 
 Open **mdview > Settings…** (Cmd+,):
 
-- **Font tab** — body font family and size, code font family (fixed-width families only) and size, the space before list items, whether headings render bold, whether ordered lists are renumbered to their real positions, and whether the `**`/`*`/`_` around emphasis and the backticks around inline code are drawn.
+- **Font tab** — body font family and size, code font family (fixed-width families only) and size, the space before list items, whether headings render bold, whether ordered lists are renumbered to their real positions, and whether the markdown markers are drawn.
 - **Colors tab** — appearance mode (System / Light / Dark), plus a color well per node type and the code block background, editable separately for the light and dark palettes.
 
 Preferences persist across launches and apply to every open window at once.

@@ -72,11 +72,12 @@ final class Preferences {
         didSet { defaults.set(renumberOrderedLists, forKey: Keys.renumberOrderedLists) }
     }
 
-    /// Leaves the `**`, `*` and `_` around emphasis and the backticks around
-    /// inline code undrawn. The characters stay in the document either way —
-    /// only the glyphs go — so off simply shows them again.
-    var hideInlineDelimiters: Bool {
-        didSet { defaults.set(hideInlineDelimiters, forKey: Keys.hideInlineDelimiters) }
+    /// Leaves the markup undrawn: the `**`, `*` and `_` around emphasis, the
+    /// backticks around inline code, the `#` opening a heading and the `>`
+    /// opening each line of a quote. The characters stay in the document either
+    /// way — only the glyphs go — so off simply shows them again.
+    var hideMarkdownMarkers: Bool {
+        didSet { defaults.set(hideMarkdownMarkers, forKey: Keys.hideMarkdownMarkers) }
     }
 
     /// Points of vertical space before each list item, ordered or not. Zero
@@ -108,7 +109,7 @@ final class Preferences {
         static let colorTheme = "mdview.colorTheme"
         static let boldHeadings = "mdview.boldHeadings"
         static let renumberOrderedLists = "mdview.renumberOrderedLists"
-        static let hideInlineDelimiters = "mdview.hideInlineDelimiters"
+        static let hideMarkdownMarkers = "mdview.hideMarkdownMarkers"
         static let listItemSpacing = "mdview.listItemSpacing"
         static let appearanceMode = "mdview.appearanceMode"
     }
@@ -144,7 +145,7 @@ final class Preferences {
             : CGFloat(defaults.double(forKey: Keys.listItemSpacing))
         boldHeadings = defaults.object(forKey: Keys.boldHeadings) as? Bool ?? true
         renumberOrderedLists = defaults.object(forKey: Keys.renumberOrderedLists) as? Bool ?? true
-        hideInlineDelimiters = defaults.object(forKey: Keys.hideInlineDelimiters) as? Bool ?? true
+        hideMarkdownMarkers = defaults.object(forKey: Keys.hideMarkdownMarkers) as? Bool ?? true
         appearanceMode = defaults.string(forKey: Keys.appearanceMode)
             .flatMap(AppearanceMode.init(rawValue:)) ?? .system
 

@@ -18,6 +18,7 @@ struct ContentView: View {
         DocumentTextView(
             attributedText: attributedText,
             backgroundColor: preferences.style(isDarkAppearance: isDarkAppearance).backgroundColor,
+            blockquoteBarColor: preferences.style(isDarkAppearance: isDarkAppearance).color(for: .blockquote),
             onAppearanceChange: { isDark in
                 // Drives a re-render only when the appearance actually flips.
                 if isDarkAppearance != isDark { isDarkAppearance = isDark }
@@ -67,7 +68,7 @@ struct ContentView: View {
             codeFontSize: preferences.codeFontSize,
             boldHeadings: preferences.boldHeadings,
             renumberOrderedLists: preferences.renumberOrderedLists,
-            hideInlineDelimiters: preferences.hideInlineDelimiters,
+            hideMarkdownMarkers: preferences.hideMarkdownMarkers,
             listItemSpacing: preferences.listItemSpacing
         )
     }
@@ -80,7 +81,7 @@ struct ContentView: View {
         let codeFontSize: CGFloat
         let boldHeadings: Bool
         let renumberOrderedLists: Bool
-        let hideInlineDelimiters: Bool
+        let hideMarkdownMarkers: Bool
         let listItemSpacing: CGFloat
     }
 
@@ -150,7 +151,7 @@ struct ContentView: View {
             markdown: text,
             style: preferences.style(isDarkAppearance: isDarkAppearance),
             renumberOrderedLists: preferences.renumberOrderedLists,
-            hideInlineDelimiters: preferences.hideInlineDelimiters
+            hideMarkdownMarkers: preferences.hideMarkdownMarkers
         )
     }
 }

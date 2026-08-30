@@ -28,25 +28,30 @@ final class MarkdownRendererTests: XCTestCase {
         text.distance(from: text.startIndex, to: text.range(of: substring)!.lowerBound)
     }
 
-    func testHeadingIsBoldAndColored() {
+    /// A heading is told apart by its size, not by a colour of its own: it is
+    /// drawn in the body colour, larger.
+    func testHeadingIsSizedAndBoldButNotColored() throws {
         let text = "# Title"
         let currentStyle = style()
         let attributed = MarkdownRenderer.render(markdown: text, style: currentStyle)
 
         let color = attributed.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
-        XCTAssertEqual(color, currentStyle.color(for: .heading1))
+        XCTAssertEqual(color, currentStyle.color(for: .body))
 
-        let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
-        XCTAssertTrue(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? false)
+        let font = try XCTUnwrap(attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        XCTAssertGreaterThan(font.pointSize, currentStyle.baseFont.pointSize)
+        XCTAssertTrue(font.fontDescriptor.symbolicTraits.contains(.bold))
     }
 
-    func testHeadingBoldnessCanBeDisabled() {
+    /// The toggle governs weight only — the size is what a heading is.
+    func testHeadingBoldnessCanBeDisabled() throws {
         let text = "# Title"
         let currentStyle = style(boldHeadings: false)
         let attributed = MarkdownRenderer.render(markdown: text, style: currentStyle)
 
-        let font = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
-        XCTAssertFalse(font?.fontDescriptor.symbolicTraits.contains(.bold) ?? true)
+        let font = try XCTUnwrap(attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        XCTAssertFalse(font.fontDescriptor.symbolicTraits.contains(.bold))
+        XCTAssertGreaterThan(font.pointSize, currentStyle.baseFont.pointSize)
     }
 
     func testStrongTextIsBoldAndColored() {

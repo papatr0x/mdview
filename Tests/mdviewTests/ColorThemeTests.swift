@@ -36,17 +36,17 @@ final class ColorThemeTests: XCTestCase {
     /// meant a new kind arriving as near-black text on a near-black page.
     func testMissingKindsAreFilledFromTheMatchingAppearance() throws {
         let data = try storedTheme(
-            light: [(MarkdownNodeKind.heading1.rawValue, red)],
-            dark: [(MarkdownNodeKind.heading1.rawValue, red)]
+            light: [(MarkdownNodeKind.blockquote.rawValue, red)],
+            dark: [(MarkdownNodeKind.blockquote.rawValue, red)]
         )
         let theme = try JSONDecoder().decode(ColorTheme.self, from: data)
 
         // What the file did carry survives.
-        XCTAssertEqual(theme.light.colors[.heading1], red)
-        XCTAssertEqual(theme.dark.colors[.heading1], red)
+        XCTAssertEqual(theme.light.colors[.blockquote], red)
+        XCTAssertEqual(theme.dark.colors[.blockquote], red)
 
         // Everything it did not is filled per appearance, not from light twice.
-        for kind in MarkdownNodeKind.allCases where kind != .heading1 {
+        for kind in MarkdownNodeKind.allCases where kind != .blockquote {
             XCTAssertEqual(theme.light.colors[kind], ColorPalette.defaultLight.colors[kind],
                            "\(kind.rawValue) should fall back to the light default")
             XCTAssertEqual(theme.dark.colors[kind], ColorPalette.defaultDark.colors[kind],
@@ -65,19 +65,19 @@ final class ColorThemeTests: XCTestCase {
     func testUnknownNodeKindDoesNotDiscardTheTheme() throws {
         let data = try storedTheme(
             light: [
-                (MarkdownNodeKind.heading1.rawValue, red),
+                (MarkdownNodeKind.blockquote.rawValue, red),
                 ("tableHeader", RGBAColor(red: 0, green: 1, blue: 0)),
                 (MarkdownNodeKind.link.rawValue, red)
             ],
-            dark: [(MarkdownNodeKind.heading1.rawValue, red)]
+            dark: [(MarkdownNodeKind.blockquote.rawValue, red)]
         )
         let theme = try JSONDecoder().decode(ColorTheme.self, from: data)
 
         // The unknown entry is skipped, and — the point — the known ones on
         // both sides of it are kept.
-        XCTAssertEqual(theme.light.colors[.heading1], red)
+        XCTAssertEqual(theme.light.colors[.blockquote], red)
         XCTAssertEqual(theme.light.colors[.link], red)
-        XCTAssertEqual(theme.dark.colors[.heading1], red)
+        XCTAssertEqual(theme.dark.colors[.blockquote], red)
     }
 
     /// The encoded form has to stay readable by builds that predate this fix,

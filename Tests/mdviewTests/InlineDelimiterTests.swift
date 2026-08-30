@@ -132,14 +132,14 @@ final class InlineDelimiterTests: XCTestCase {
     /// is attribute-for-attribute the one that came before the feature existed.
     func testDisablingLeavesTheRenderUntouched() {
         let source = "Some **bold** and *italic* text.\n"
-        let off = MarkdownRenderer.render(markdown: source, style: style(), hideInlineDelimiters: false)
+        let off = MarkdownRenderer.render(markdown: source, style: style(), hideMarkdownMarkers: false)
 
         XCTAssertEqual(hiddenRanges(in: off), [])
         XCTAssertTrue(off.isEqual(to: MarkdownRenderer.render(
             plan: MarkdownRenderer.plan(for: source),
             markdown: source,
             style: style(),
-            hideInlineDelimiters: false
+            hideMarkdownMarkers: false
         )))
     }
 
@@ -150,9 +150,9 @@ final class InlineDelimiterTests: XCTestCase {
         let plan = MarkdownRenderer.plan(for: source)
 
         let on = MarkdownRenderer.render(plan: plan, markdown: source, style: style(),
-                                         hideInlineDelimiters: true)
+                                         hideMarkdownMarkers: true)
         let off = MarkdownRenderer.render(plan: plan, markdown: source, style: style(),
-                                          hideInlineDelimiters: false)
+                                          hideMarkdownMarkers: false)
 
         XCTAssertEqual(hiddenText(in: on), "**|**")
         XCTAssertEqual(hiddenRanges(in: off), [])
@@ -179,7 +179,7 @@ final class InlineDelimiterTests: XCTestCase {
         let textView = AppearanceAwareTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
         textView.layoutManager?.delegate = textView
         textView.textStorage?.setAttributedString(
-            MarkdownRenderer.render(markdown: source, style: style(), hideInlineDelimiters: hiding)
+            MarkdownRenderer.render(markdown: source, style: style(), hideMarkdownMarkers: hiding)
         )
         if let container = textView.textContainer {
             textView.layoutManager?.ensureLayout(for: container)

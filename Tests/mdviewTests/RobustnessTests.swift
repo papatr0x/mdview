@@ -48,7 +48,7 @@ final class RobustnessTests: XCTestCase {
             colors: [:]
         )
         // Missing entries resolve through the light defaults rather than trapping.
-        XCTAssertEqual(empty.color(for: .heading1), ColorPalette.defaultLight.color(for: .heading1))
+        XCTAssertEqual(empty.color(for: .blockquote), ColorPalette.defaultLight.color(for: .blockquote))
     }
 
     /// A theme persisted before the background keys existed must pick up each
@@ -81,7 +81,7 @@ final class RobustnessTests: XCTestCase {
     func testThemeRoundTripsThroughJSON() throws {
         var theme = ColorTheme.default
         theme.dark.background = RGBAColor(red: 0.2, green: 0.1, blue: 0.3)
-        theme.light.colors[.heading1] = RGBAColor(red: 0.9, green: 0.1, blue: 0.1)
+        theme.light.colors[.blockquote] = RGBAColor(red: 0.9, green: 0.1, blue: 0.1)
 
         let decoded = try JSONDecoder().decode(
             ColorTheme.self,
@@ -216,7 +216,9 @@ final class RobustnessTests: XCTestCase {
         let source = "# Head\r\rBody text\r\r- item one\r- item two\r"
         let attributed = MarkdownRenderer.render(markdown: source, style: style())
 
-        XCTAssertEqual(charactersColored(style().color(for: .heading1), in: attributed), 6)
+        // The heading is on line 1; it carries the H1 size rather than a colour.
+        let headingFont = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(headingFont?.pointSize, style().headingFont(level: 1).pointSize)
         // One "-" per item, both of them past the first line.
         XCTAssertEqual(charactersColored(style().color(for: .listMarker), in: attributed), 2)
     }
@@ -227,7 +229,9 @@ final class RobustnessTests: XCTestCase {
         let source = "# Head\r\n\r\nBody text\r\n\r\n- item one\r\n- item two\r\n"
         let attributed = MarkdownRenderer.render(markdown: source, style: style())
 
-        XCTAssertEqual(charactersColored(style().color(for: .heading1), in: attributed), 6)
+        // The heading is on line 1; it carries the H1 size rather than a colour.
+        let headingFont = attributed.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(headingFont?.pointSize, style().headingFont(level: 1).pointSize)
         XCTAssertEqual(charactersColored(style().color(for: .listMarker), in: attributed), 2)
     }
 

@@ -34,6 +34,10 @@ extension NSAttributedString.Key {
     /// generating glyphs and gives those characters no glyph at all, which is
     /// what hides them without touching a single character of the source.
     static let hiddenMarkdownDelimiter = NSAttributedString.Key("mdviewHiddenMarkdownDelimiter")
+
+    /// How deeply nested the blockquote on this range is, so the text view can
+    /// draw one rule down its left edge per level.
+    static let blockquoteLevel = NSAttributedString.Key("mdviewBlockquoteLevel")
 }
 
 enum MarkdownRenderer {
@@ -67,11 +71,12 @@ enum MarkdownRenderer {
     ///   ordered lists" setting turns it off for a strictly verbatim view.
     ///   The rewrites are part of every plan — they depend on the text, not on
     ///   the style — so toggling the setting does not invalidate a cached plan.
-    /// - Parameter hideInlineDelimiters: Leaves the `**`, `*` and `_` around
-    ///   bold and italic text undrawn, and the backticks around inline code
-    ///   with them, so the markup reads as what it marks instead of competing
-    ///   with its own markers — which is what they did, since a node's style
-    ///   covers its whole range and rendered them bold, or as code, too. Unlike
+    /// - Parameter hideMarkdownMarkers: Leaves the markup undrawn — the `**`,
+    ///   `*` and `_` around emphasis, the backticks around inline code, the `#`
+    ///   opening a heading and the `>` opening each line of a quote — so the
+    ///   markup reads as what it marks instead of competing with its own
+    ///   markers, which is what it did while a node's style covered its whole
+    ///   range and rendered them bold, or as code, too. Unlike
     ///   the renumbering above, this alters no text: the marked characters stay
     ///   in the string and are dropped at glyph generation, so the document is
     ///   still the file and copying still yields the markers.
@@ -80,7 +85,7 @@ enum MarkdownRenderer {
         markdown text: String,
         style: MarkdownStyle,
         renumberOrderedLists: Bool = true,
-        hideInlineDelimiters: Bool = true
+        hideMarkdownMarkers: Bool = true
     ) -> NSAttributedString {
         let attributed = NSMutableAttributedString(
             string: text,
@@ -89,16 +94,10 @@ enum MarkdownRenderer {
                 .foregroundColor: style.color(for: .body)
             ]
         )
-        let listItemParagraphStyle = style.listItemParagraphStyle()
         for operation in plan.operations {
-            Self.apply(
-                operation,
-                to: attributed,
-                style: style,
-                listItemParagraphStyle: listItemParagraphStyle
-            )
+            Self.apply(operation, to: attributed, style: style)
         }
-        if hideInlineDelimiters {
+        if hideMarkdownMarkers {
             // Nothing is written when the setting is off, so switching it back
             // restores exactly the attributed string that came before it.
             for range in plan.hiddenDelimiters {
@@ -116,14 +115,14 @@ enum MarkdownRenderer {
         markdown text: String,
         style: MarkdownStyle,
         renumberOrderedLists: Bool = true,
-        hideInlineDelimiters: Bool = true
+        hideMarkdownMarkers: Bool = true
     ) -> NSAttributedString {
         render(
             plan: plan(for: text),
             markdown: text,
             style: style,
             renumberOrderedLists: renumberOrderedLists,
-            hideInlineDelimiters: hideInlineDelimiters
+            hideMarkdownMarkers: hideMarkdownMarkers
         )
     }
 
@@ -136,8 +135,7 @@ enum MarkdownRenderer {
     private static func apply(
         _ operation: StyleOperation,
         to attributed: NSMutableAttributedString,
-        style: MarkdownStyle,
-        listItemParagraphStyle: NSParagraphStyle?
+        style: MarkdownStyle
     ) {
         switch operation {
         case let .style(kind, range, changeFont):
@@ -166,10 +164,26 @@ enum MarkdownRenderer {
             }
 
         case let .listItemSpacing(range):
-            // Nil when the setting is zero: nothing is written, so turning the
+            // Nothing is written when the setting is zero, so turning the
             // spacing off restores exactly the previous attributed string.
-            guard let listItemParagraphStyle else { break }
-            attributed.addAttribute(.paragraphStyle, value: listItemParagraphStyle, range: range)
+            guard style.listItemSpacing > 0 else { break }
+            Self.mutateParagraphStyle(of: attributed, in: range) { paragraphStyle in
+                paragraphStyle.paragraphSpacingBefore = style.listItemSpacing
+            }
+
+        case let .headingFont(level, range):
+            // Font only. Headings carry no colour of their own, so the body
+            // colour the string was seeded with shows through.
+            attributed.addAttribute(.font, value: style.headingFont(level: level), range: range)
+
+        case let .blockquoteIndent(level, range):
+            let indent = MarkdownStyle.blockquoteIndent * CGFloat(level)
+            Self.mutateParagraphStyle(of: attributed, in: range) { paragraphStyle in
+                // Both, or only the first line of each paragraph moves.
+                paragraphStyle.firstLineHeadIndent = indent
+                paragraphStyle.headIndent = indent
+            }
+            attributed.addAttribute(.blockquoteLevel, value: level, range: range)
 
         case let .monospacedPreservingTraits(kind, range):
             // Enclosing strong/emphasis nodes are painted first, so the range
@@ -188,6 +202,29 @@ enum MarkdownRenderer {
                     range: subRange
                 )
             }
+        }
+    }
+
+    /// Adds to whatever paragraph style is already on the range instead of
+    /// replacing it.
+    ///
+    /// `addAttribute(.paragraphStyle:)` swaps the whole object, so two
+    /// paragraph-level attributes cancel each other out depending on which ran
+    /// last — and there are two now: a blockquote's indent and a list item's
+    /// spacing, which meet whenever a list sits inside a quote. Copying and
+    /// mutating costs an allocation per range, which is the price of the two
+    /// composing at all.
+    private static func mutateParagraphStyle(
+        of attributed: NSMutableAttributedString,
+        in range: NSRange,
+        _ change: (NSMutableParagraphStyle) -> Void
+    ) {
+        guard range.length > 0 else { return }
+        attributed.enumerateAttribute(.paragraphStyle, in: range, options: []) { value, subRange, _ in
+            let existing = (value as? NSParagraphStyle) ?? .default
+            guard let updated = existing.mutableCopy() as? NSMutableParagraphStyle else { return }
+            change(updated)
+            attributed.addAttribute(.paragraphStyle, value: updated, range: subRange)
         }
     }
 
@@ -254,6 +291,10 @@ private enum StyleOperation: Sendable {
     /// Carries no amount: how much space a list item gets is a setting, so it
     /// is resolved when painting, not when planning.
     case listItemSpacing(NSRange)
+    /// A heading's size comes from its level and the body size, so only the
+    /// level is recorded here.
+    case headingFont(level: Int, range: NSRange)
+    case blockquoteIndent(level: Int, range: NSRange)
 }
 
 /// A pending rewrite of one ordered-list numeral: the range of the digits as
@@ -273,6 +314,7 @@ private struct SourcePlanner: MarkupVisitor {
     var operations: [StyleOperation] = []
     var renumberings: [Renumbering] = []
     var hiddenDelimiters: [NSRange] = []
+    var blockQuoteDepth = 0
 
     private var nsText: NSString { text as NSString }
 
@@ -286,16 +328,21 @@ private struct SourcePlanner: MarkupVisitor {
 
     mutating func visitHeading(_ heading: Heading) {
         if let range = nsRange(for: heading) {
-            operations.append(.style(kind: headingKind(for: heading.level), range: range, changeFont: true))
+            operations.append(.headingFont(level: heading.level, range: range))
+            recordHeadingMarkers(in: range)
         }
         for child in heading.children { visit(child) }
     }
 
     mutating func visitBlockQuote(_ blockQuote: BlockQuote) {
+        blockQuoteDepth += 1
         if let range = nsRange(for: blockQuote) {
             operations.append(.style(kind: .blockquote, range: range, changeFont: false))
+            operations.append(.blockquoteIndent(level: blockQuoteDepth, range: range))
+            recordBlockquoteMarkers(in: range)
         }
         for child in blockQuote.children { visit(child) }
+        blockQuoteDepth -= 1
     }
 
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) {
@@ -337,6 +384,94 @@ private struct SourcePlanner: MarkupVisitor {
             recordDelimiters(of: range, minimumWidth: 1)
         }
         for child in emphasis.children { visit(child) }
+    }
+
+    // MARK: - Block markers
+
+    /// The `#` run that opens an ATX heading and the spaces after it — leaving
+    /// those behind would push the title in by a space — plus the closing run
+    /// CommonMark allows at the end of the line (`## Title ##`).
+    ///
+    /// A setext heading, underlined with `===` or `---`, has no `#` to hide;
+    /// the guard on the first character leaves it alone.
+    private mutating func recordHeadingMarkers(in range: NSRange) {
+        guard range.location != NSNotFound, range.length > 0,
+              NSMaxRange(range) <= nsText.length,
+              nsText.character(at: range.location) == Self.utf16("#") else { return }
+
+        var opening = 0
+        while opening < range.length,
+              nsText.character(at: range.location + opening) == Self.utf16("#") { opening += 1 }
+        while opening < range.length,
+              isSpaceOrTab(nsText.character(at: range.location + opening)) { opening += 1 }
+        hiddenDelimiters.append(NSRange(location: range.location, length: opening))
+
+        // The closing run is looked for *past* the node, out to the end of the
+        // line: cmark strips it before reporting the range, so `## Title ##`
+        // comes back covering only `## Title`. Staying inside the node — which
+        // is where the opening run lives — would never have found it.
+        let line = nsText.paragraphRange(for: NSRange(location: range.location, length: 0))
+        let contentEnd = NSMaxRange(range)
+        guard NSMaxRange(line) > contentEnd else { return }
+
+        var cursor = NSMaxRange(line)
+        while cursor > contentEnd, isLineTrailing(nsText.character(at: cursor - 1)) { cursor -= 1 }
+        let hashesEnd = cursor
+        while cursor > contentEnd, nsText.character(at: cursor - 1) == Self.utf16("#") { cursor -= 1 }
+        guard cursor < hashesEnd else { return }
+
+        // Everything between the title and the run has to be whitespace for
+        // this to be a closing sequence rather than something else entirely.
+        while cursor > contentEnd, isSpaceOrTab(nsText.character(at: cursor - 1)) { cursor -= 1 }
+        guard cursor == contentEnd else { return }
+        hiddenDelimiters.append(NSRange(location: cursor, length: hashesEnd - cursor))
+    }
+
+    /// The `>` opening every line of a quote, with the space after it, for as
+    /// many levels as the line carries.
+    ///
+    /// Per line, because that is where the marker lives: a quote repeats it on
+    /// each of its lines rather than only the first. One pass over the
+    /// outermost quote already covers the inner markers of a nested one, so the
+    /// inner node re-marks a subset — harmless, since the attribute says only
+    /// that a character is a marker.
+    private mutating func recordBlockquoteMarkers(in range: NSRange) {
+        guard range.location != NSNotFound, range.length > 0,
+              NSMaxRange(range) <= nsText.length else { return }
+
+        var lineStart = nsText.paragraphRange(for: NSRange(location: range.location, length: 0)).location
+        while lineStart < NSMaxRange(range) {
+            let line = nsText.paragraphRange(for: NSRange(location: lineStart, length: 0))
+            guard line.length > 0 else { return }
+            markQuotePrefix(of: line)
+            lineStart = NSMaxRange(line)
+        }
+    }
+
+    private mutating func markQuotePrefix(of line: NSRange) {
+        var cursor = line.location
+        let end = NSMaxRange(line)
+        while cursor < end {
+            var scan = cursor
+            while scan < end, isSpaceOrTab(nsText.character(at: scan)) { scan += 1 }
+            // A line with no marker is a lazy continuation, and there is
+            // nothing on it to hide.
+            guard scan < end, nsText.character(at: scan) == Self.utf16(">") else { return }
+            var markerEnd = scan + 1
+            if markerEnd < end, isSpaceOrTab(nsText.character(at: markerEnd)) { markerEnd += 1 }
+            hiddenDelimiters.append(NSRange(location: scan, length: markerEnd - scan))
+            cursor = markerEnd
+        }
+    }
+
+    private func isSpaceOrTab(_ character: unichar) -> Bool {
+        character == Self.utf16(" ") || character == Self.utf16("\t")
+    }
+
+    private func isLineTrailing(_ character: unichar) -> Bool {
+        isSpaceOrTab(character)
+            || character == Self.utf16("\n")
+            || character == Self.utf16("\r")
     }
 
     // MARK: - Inline delimiters
@@ -506,17 +641,6 @@ private struct SourcePlanner: MarkupVisitor {
         }
         guard markerLength > 0 else { return nil }
         return NSRange(location: itemRange.location, length: markerLength)
-    }
-
-    private func headingKind(for level: Int) -> MarkdownNodeKind {
-        switch level {
-        case 1: return .heading1
-        case 2: return .heading2
-        case 3: return .heading3
-        case 4: return .heading4
-        case 5: return .heading5
-        default: return .heading6
-        }
     }
 
     // MARK: - Source range mapping

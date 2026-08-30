@@ -112,8 +112,8 @@ final class OrderedListNumberingTests: XCTestCase {
         // corrupted the offsets, this range would carry body attributes.
         let headingLocation = text.range(of: "# After the list").location
         XCTAssertNotEqual(headingLocation, NSNotFound)
-        let color = attributed.attribute(.foregroundColor, at: headingLocation, effectiveRange: nil) as? NSColor
-        XCTAssertEqual(color, currentStyle.color(for: .heading1))
+        let font = attributed.attribute(.font, at: headingLocation, effectiveRange: nil) as? NSFont
+        XCTAssertEqual(font?.pointSize, currentStyle.headingFont(level: 1).pointSize)
     }
 
     // MARK: - Attributes

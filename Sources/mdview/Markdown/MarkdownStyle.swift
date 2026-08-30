@@ -36,18 +36,29 @@ struct MarkdownStyle {
             ?? NSFont.monospacedSystemFont(ofSize: codeFontSize, weight: .regular)
     }
 
-    /// The paragraph style that puts space above a list item, or nil when the
-    /// setting is zero — so switching the feature off leaves the rendered
-    /// document byte for byte and attribute for attribute as it was.
+    /// A heading's font: the body family, resized by level, in whatever weight
+    /// the "Bold headings" setting asks for.
     ///
-    /// Built by the caller once per render and reused for every item: one
-    /// allocation per list item would be wasteful on a long document.
-    func listItemParagraphStyle() -> NSParagraphStyle? {
-        guard listItemSpacing > 0 else { return nil }
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.paragraphSpacingBefore = listItemSpacing
-        return paragraphStyle.copy() as? NSParagraphStyle
+    /// Since headings carry no colour of their own any more, size is the only
+    /// thing telling one level from another — and telling any of them from body
+    /// text, given the `#` is not drawn either. So the scale is strictly
+    /// decreasing and **no level lands on the body size**: H6 sits just under
+    /// it rather than on it.
+    func headingFont(level: Int) -> NSFont {
+        let clamped = min(max(level, 1), Self.headingScale.count)
+        let size = (bodyFontSize * Self.headingScale[clamped - 1]).rounded()
+        let font = NSFont(name: bodyFontName, size: size) ?? NSFont.systemFont(ofSize: size)
+        return withTraits(font, bold: boldHeadings, italic: false)
     }
+
+    /// Held to 1.6 rather than the 2.0 a browser would use: this is still a
+    /// source viewer, and a heading has to sit in the same column of text as
+    /// everything around it.
+    private static let headingScale: [CGFloat] = [1.60, 1.42, 1.28, 1.15, 1.05, 0.95]
+
+    /// How far a blockquote is pushed in per level of nesting, and the step
+    /// between the bars drawn down its left edge.
+    static let blockquoteIndent: CGFloat = 18
 
     func color(for kind: MarkdownNodeKind) -> NSColor {
         palette.color(for: kind)
@@ -63,11 +74,10 @@ struct MarkdownStyle {
     }
 
     /// The font for a node kind: the code font for code, the body font for
-    /// everything else, and headings in the bold weight of the body font.
+    /// everything else. Headings go through `headingFont(level:)` instead,
+    /// since what distinguishes them is a size.
     func font(for kind: MarkdownNodeKind) -> NSFont {
         switch kind {
-        case .heading1, .heading2, .heading3, .heading4, .heading5, .heading6:
-            return withTraits(baseFont, bold: boldHeadings, italic: false)
         case .inlineCode, .codeBlock:
             return codeFont
         default:

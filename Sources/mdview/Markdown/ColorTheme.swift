@@ -1,13 +1,11 @@
 import AppKit
 
 /// The distinct markdown constructs that get their own configurable color.
+/// Headings are absent on purpose: they are told apart by size now, not by
+/// colour, so there is nothing per-level left to configure. A theme saved by a
+/// build that still had them decodes fine — `StoredColors` skips raw values this
+/// one does not know rather than discarding the whole map.
 enum MarkdownNodeKind: String, CaseIterable, Codable, Identifiable {
-    case heading1
-    case heading2
-    case heading3
-    case heading4
-    case heading5
-    case heading6
     case body
     case blockquote
     case strong
@@ -22,12 +20,6 @@ enum MarkdownNodeKind: String, CaseIterable, Codable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .heading1: return "Heading 1"
-        case .heading2: return "Heading 2"
-        case .heading3: return "Heading 3"
-        case .heading4: return "Heading 4"
-        case .heading5: return "Heading 5"
-        case .heading6: return "Heading 6"
         case .body: return "Body text"
         case .blockquote: return "Blockquote (>)"
         case .strong: return "Bold"
@@ -125,12 +117,6 @@ struct ColorPalette: Codable, Equatable {
         background: RGBAColor(red: 1.0, green: 1.0, blue: 1.0),
         codeBlockBackground: RGBAColor(red: 0.88, green: 0.93, blue: 1.0),
         colors: [
-        .heading1: RGBAColor(red: 0.71, green: 0.11, blue: 0.11),
-        .heading2: RGBAColor(red: 0.75, green: 0.30, blue: 0.05),
-        .heading3: RGBAColor(red: 0.60, green: 0.40, blue: 0.02),
-        .heading4: RGBAColor(red: 0.20, green: 0.20, blue: 0.20),
-        .heading5: RGBAColor(red: 0.20, green: 0.20, blue: 0.20),
-        .heading6: RGBAColor(red: 0.35, green: 0.35, blue: 0.35),
         .body: RGBAColor(red: 0.0, green: 0.0, blue: 0.0),
         .blockquote: RGBAColor(red: 0.35, green: 0.35, blue: 0.4),
         .strong: RGBAColor(red: 0.0, green: 0.0, blue: 0.0),
@@ -146,12 +132,6 @@ struct ColorPalette: Codable, Equatable {
         background: RGBAColor(red: 0.12, green: 0.12, blue: 0.13),
         codeBlockBackground: RGBAColor(red: 0.08, green: 0.14, blue: 0.26),
         colors: [
-        .heading1: RGBAColor(red: 1.0, green: 0.45, blue: 0.42),
-        .heading2: RGBAColor(red: 1.0, green: 0.62, blue: 0.35),
-        .heading3: RGBAColor(red: 0.95, green: 0.78, blue: 0.35),
-        .heading4: RGBAColor(red: 0.90, green: 0.90, blue: 0.90),
-        .heading5: RGBAColor(red: 0.90, green: 0.90, blue: 0.90),
-        .heading6: RGBAColor(red: 0.75, green: 0.75, blue: 0.75),
         .body: RGBAColor(red: 0.92, green: 0.92, blue: 0.92),
         .blockquote: RGBAColor(red: 0.65, green: 0.65, blue: 0.75),
         .strong: RGBAColor(red: 1.0, green: 1.0, blue: 1.0),

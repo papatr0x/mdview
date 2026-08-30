@@ -59,7 +59,7 @@ final class PreferencesTests: XCTestCase {
         preferences.boldHeadings = false
         preferences.renumberOrderedLists = false
         preferences.appearanceMode = .dark
-        preferences.colorTheme.light.colors[.heading1] = RGBAColor(red: 0.1, green: 0.8, blue: 0.3)
+        preferences.colorTheme.light.colors[.blockquote] = RGBAColor(red: 0.1, green: 0.8, blue: 0.3)
 
         let reloaded = Preferences(defaults: defaults)
 
@@ -72,7 +72,7 @@ final class PreferencesTests: XCTestCase {
         XCTAssertFalse(reloaded.renumberOrderedLists)
         XCTAssertEqual(reloaded.appearanceMode, .dark)
         XCTAssertEqual(
-            reloaded.colorTheme.light.colors[.heading1],
+            reloaded.colorTheme.light.colors[.blockquote],
             RGBAColor(red: 0.1, green: 0.8, blue: 0.3)
         )
     }
