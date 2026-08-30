@@ -51,10 +51,12 @@ struct MarkdownStyle {
         return withTraits(font, bold: boldHeadings, italic: false)
     }
 
-    /// Held to 1.6 rather than the 2.0 a browser would use: this is still a
-    /// source viewer, and a heading has to sit in the same column of text as
+    /// H1 is deliberately far from the rest — a document's title should read as
+    /// one at a glance, and at 1.6 it was only a few points above H2. The lower
+    /// levels stay close together: they are section headings, and this is still
+    /// a source viewer where a heading sits in the same column of text as
     /// everything around it.
-    private static let headingScale: [CGFloat] = [1.60, 1.42, 1.28, 1.15, 1.05, 0.95]
+    private static let headingScale: [CGFloat] = [2.00, 1.42, 1.28, 1.15, 1.05, 0.95]
 
     /// How far a blockquote is pushed in per level of nesting, and the step
     /// between the bars drawn down its left edge.
